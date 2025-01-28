@@ -1,0 +1,56 @@
+.form {
+  background-image: url("/back.jpg");
+
+  background-size: cover;
+  background-position: center bottom;
+  background-attachment: fixed;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+
+  justify-content: center;
+  align-items: center;
+}
+
+.formIn {
+  margin: 3rem 0rem;
+  position: relative;
+  z-index: 2;
+  background-color: #fff;
+  border: 1px solid #e2e2e2;
+  padding: 3rem 4rem;
+  border-radius: 8px;
+  box-shadow: rgba(0, 0, 0, 0.15) 1.95px 1.95px 2.6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+.buttonGrp {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.forget {
+  margin-top: 1rem;
+  width: 100%;
+  text-align: left;
+  color: rgb(0, 55, 255);
+}
+.forget:hover {
+  cursor: pointer;
+}
+.snapzLogo {
+  width: 150px;
+  margin-bottom: 1.5rem;
+}
+#loginButton {
+  color: #fff;
+  background-color: #a42a28;
+}
+
+@media (max-width: 1200px) {
+  .form {
+    background-attachment: scroll;
+  }
+}
