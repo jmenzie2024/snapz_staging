@@ -1315,7 +1315,7 @@ function QuestionBankPage() {
 
       // setQuiz(data);
     } catch (error) {
-      localStorage.clear();
+      // localStorage.clear();
       console.log("catch block MyQuiz.js", error);
     }
   };
