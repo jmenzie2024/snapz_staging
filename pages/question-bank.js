@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import moment from 'moment-timezone';
+import moment from "moment-timezone";
 import _ from "lodash";
 import { CgCloseR } from "react-icons/cg";
 import { VscDebugBreakpointLog } from "react-icons/vsc";
@@ -12,12 +12,10 @@ import { motion } from "framer-motion";
 import Test from "../components/Test";
 import { ToastContainer, toast, Slide } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { registerLocale } from 'react-datepicker';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import es from 'date-fns/locale/es';
-import enUS from 'date-fns/locale/en-US';
-
+import { registerLocale } from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import es from "date-fns/locale/es";
+import enUS from "date-fns/locale/en-US";
 import { BiSolidWindowAlt } from "react-icons/bi";
 import { PiFloppyDiskBold } from "react-icons/pi";
 import { AiFillPrinter } from "react-icons/ai";
@@ -26,28 +24,34 @@ import { HiMiniMagnifyingGlass } from "react-icons/hi2";
 import "tippy.js/dist/tippy.css";
 
 import Model from "../components/Model";
-import { cullquestions, randomKey, capitalizeFirstLetterOFWordFromString, toLowerCase, removeDuplicatesFromArrayOfObjectByObjKey, isValidYYmmddFormat } from "@/utils/utils";
-import { useSelector } from "react-redux";
-
-import { getCategory, postCategory } from "@/utils/utils";
-import { checkQuizData } from "@/utils/utils";
+import {
+  cullquestions,
+  toLowerCase,
+  removeDuplicatesFromArrayOfObjectByObjKey,
+  isValidYYmmddFormat,
+} from "@/utils/utils";
+import { useSelector, useDispatch } from "react-redux";
 import Swal from "sweetalert2";
-import { extractQuestionForAllCategory } from "@/utils/utils";
-import Modal from 'react-bootstrap/Modal';
+import {
+  getCategory,
+  postCategory,
+  checkQuizData,
+  extractQuestionForAllCategory,
+} from "@/utils/utils";
+import Modal from "react-bootstrap/Modal";
+import { totalQuestions } from "@/components/Features/AddedQuestions/AddedQuestion";
+import Head from "next/head";
 
-registerLocale('es', es);
-registerLocale('en-US', enUS);
-
-
+registerLocale("es", es);
+registerLocale("en-US", enUS);
 
 function QuestionBankPage() {
-
   const storeQuiz = useSelector((state) => state.questions);
+  const dispatch = useDispatch();
   const latestQuestion = storeQuiz[storeQuiz.length - 1];
 
-  const allQuestionIdsArr = latestQuestion?.map(item => item.question_id);
-  const uniqueAllQuestionIdsArr = [...new Set(allQuestionIdsArr)]; 
-  
+  const allQuestionIdsArr = latestQuestion?.map((item) => item.question_id);
+  const uniqueAllQuestionIdsArr = [...new Set(allQuestionIdsArr)];
 
   const [tip, settip] = useState(true);
   const [sessionerr, setsessionerr] = useState(false);
@@ -61,8 +65,8 @@ function QuestionBankPage() {
   const [name, setname] = useState("");
   const [filterid, setfilterid] = useState({});
   const [randomlimit, setrandomlimit] = useState("");
-  const [SelectedQuestionIds, setSelectedQuestionIds] = useState([]); 
-  
+  const [SelectedQuestionIds, setSelectedQuestionIds] = useState([]);
+
   const [randomQues, setRandomQues] = useState(false);
   const [randomQuesIds, setRandomQuesIds] = useState();
   const [solutionSet, setsolutionSet] = useState([]);
@@ -74,57 +78,166 @@ function QuestionBankPage() {
   const [category17, setCategory17] = useState([]);
   const [category20, setCategory20] = useState([]);
   const [category23, setCategory23] = useState([]);
+  const [theory, setTheory] = useState([]);
   const [All, setAll] = useState();
   const [accordianSet, setAccordianSet] = useState(true);
   const [categoryToggle, setcategoryToggle] = useState("-");
   const [defaultList, setDefaultList] = useState([]);
-  const [quizStateDate, setQuizStateDate] = useState("");
+  const [quizStateDate, setQuizStateDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
   const [initial17, setInitial17] = useState([]);
   const [initial20, setInitial20] = useState([]);
   const [initial23, setInitial23] = useState([]);
+  const [initialTheory, setInitialTheory] = useState([]);
   const [show, setShow] = useState(false);
+  const [buttonAction, setButtonAction] = useState({ open: false, new: false });
 
   const handleClose = () => setShow(false);
   const handleShow = () => setShow(true);
 
-  const [previewQues, setPreviewQues] = useState('');
-  const [previewCorrectAnswer, setPreviewCorrectAnswer] = useState('');
-  const [previewSolution, setPreviewSolution] = useState('');
-  const [singleQuestionCategory, setSingleQuestinCategory] = useState('');
+  const [previewQues, setPreviewQues] = useState("");
+  const [previewCorrectAnswer, setPreviewCorrectAnswer] = useState("");
+  const [previewSolution, setPreviewSolution] = useState("");
+  const previewContentRef = useRef(null);
+  const questionBankPanelRef = useRef(null);
+  const quizPanelRef = useRef(null);
+  const lastQuestionBankFocusRef = useRef(null);
+  const pendingQuestionBankFocusRef = useRef(null);
+  const questionBankFocusTimerRef = useRef([]);
+  const [singleQuestionCategory, setSingleQuestinCategory] = useState("");
   const [selectableRandomQuestion, setSelectableRandomQuestion] = useState(0);
+
+  const [difficultyMessage, setDifficultyMessage] = useState("");
+  const [deleteAnnouncement, setDeleteAnnouncement] = useState("");
+  const [expandAnnouncement, setExpandAnnouncement] = useState("");
 
   const router = useRouter();
   var newquestionIds;
   var token;
+  const mathJaxScriptSrc =
+    "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
 
-  
+  const currentTimezone = moment.tz.guess();
+  const currentDateFormat = moment().tz(currentTimezone).format("MM-DD-YYYY");
+
+  const restoreQuestionBankFocusAfterUpdate = (questionId, control) => {
+    pendingQuestionBankFocusRef.current = {
+      questionId: String(questionId),
+      control,
+    };
+  };
+
+  const focusPendingQuestionBankControl = () => {
+    const pendingFocus = pendingQuestionBankFocusRef.current;
+    if (!pendingFocus) return;
+
+    const focusTarget = Array.from(
+      questionBankPanelRef.current?.querySelectorAll(
+        "[data-question-bank-question-id]",
+      ) || [],
+    ).find(
+      (element) =>
+        element.dataset.questionBankQuestionId === pendingFocus.questionId &&
+        element.dataset.questionBankControl === pendingFocus.control,
+    );
+
+    if (focusTarget) {
+      focusTarget.focus({ preventScroll: true });
+      lastQuestionBankFocusRef.current = focusTarget;
+    }
+  };
+
+  const clearQuestionBankFocusTimers = () => {
+    questionBankFocusTimerRef.current.forEach((timer) => clearTimeout(timer));
+    questionBankFocusTimerRef.current = [];
+  };
+
+  const scheduleQuestionBankFocusRestore = () => {
+    clearQuestionBankFocusTimers();
+
+    [0, 50, 150, 300].forEach((delay, index, delays) => {
+      const timer = setTimeout(() => {
+        focusPendingQuestionBankControl();
+
+        if (index === delays.length - 1) {
+          pendingQuestionBankFocusRef.current = null;
+          questionBankFocusTimerRef.current = [];
+        }
+      }, delay);
+
+      questionBankFocusTimerRef.current.push(timer);
+    });
+  };
+
+  const handleQuestionBankControlMouseDown = (event, questionId, control) => {
+    restoreQuestionBankFocusAfterUpdate(questionId, control);
+    event.currentTarget.focus({ preventScroll: true });
+    lastQuestionBankFocusRef.current = event.currentTarget;
+    scheduleQuestionBankFocusRestore();
+  };
+
+  const toggleQuestionSelection = (questionId) => {
+    restoreQuestionBankFocusAfterUpdate(questionId, "action");
+    scheduleQuestionBankFocusRestore();
+    const isSelected = SelectedQuestionIds.includes(questionId);
+    if (isSelected) {
+      // Remove the question
+      setSelectedQuestions((prev) =>
+        prev.filter((q) => q.question_id !== questionId),
+      );
+      setSelectedQuestionIds((prev) => prev.filter((id) => id !== questionId));
+    } else {
+      // Add the question (max 100)
+      if (selectedQuestions.length >= 100) {
+        warn("You can only select up to 100 questions.");
+        return;
+      }
+      const question = questions.find((q) => q.question_id === questionId);
+      if (question) {
+        setSelectedQuestions((prev) => [...prev, question]);
+        setSelectedQuestionIds((prev) => [...prev, questionId]);
+      }
+    }
+  };
 
   useEffect(() => {
+    dispatch(totalQuestions(selectedQuestions.length));
+  }, [selectedQuestions]);
 
-    token = localStorage.getItem("token");
-    const quizUserName = localStorage.getItem("user");
-    const QuizName = localStorage.getItem("QuizName");
-    const QuizTitle = localStorage.getItem("QuizTitle");
-    const QuizDate = localStorage.getItem("QuizDate");
+  useEffect(() => {
+    if (!pendingQuestionBankFocusRef.current) return;
+
+    scheduleQuestionBankFocusRestore();
+  }, [SelectedQuestionIds]);
+
+  useEffect(() => clearQuestionBankFocusTimers, []);
+
+  useEffect(() => {
+    token = sessionStorage.getItem("token");
+    const quizUserName = sessionStorage.getItem("user");
+    const QuizName = sessionStorage.getItem("QuizName");
+    const QuizTitle = sessionStorage.getItem("QuizTitle");
+    const QuizDate = sessionStorage.getItem("QuizDate");
 
     setQuestions([]);
     setSelectedQuestions([]);
     if (!token) {
-      localStorage.clear();
+      sessionStorage.clear();
       router.push("/");
     } else {
       getCategory().then((result) => {
-        if (result.length > 0) {
+        if (result?.length > 0) {
           setcategoryToggle(result[0]?.category);
         }
       });
 
       if (storeQuiz.length > 0) {
         setTimeout(() => {
-          notify("Quiz loaded for use.");
+          notify("Quiz loaded");
 
           setSelectedQuestions(latestQuestion);
-          setname(capitalizeFirstLetterOFWordFromString(QuizName));
+          setname(QuizName || "");
           settitle(QuizTitle);
           QuizDate && setQuizStateDate(convertDateFormatToYYYYMMDD(QuizDate));
           newquestionIds = latestQuestion?.map((item) => item.question_id);
@@ -132,20 +245,21 @@ function QuestionBankPage() {
         }, 1000);
       }
 
-      //////////////////// Get All Quizzes ///////////////     
+      //////////////////// Get All Quizzes ///////////////
       fetchQuiz(token, quizUserName);
     }
   }, []);
 
-  useEffect(()=>{
-    if(uniqueAllQuestionIdsArr?.length > 0){
-      console.log('uniqueAllQuestionIdsArr', uniqueAllQuestionIdsArr);
-      updateQuestionsToLatestQuestions(token, uniqueAllQuestionIdsArr)
+  useEffect(() => {
+    if (buttonAction.open) {
+      openDialogBoxBeforeSave();
     }
-},[])
 
+    if (buttonAction.new) {
+      openDialogBoxBeforeSave();
+    }
+  }, [buttonAction]);
 
-  
   useEffect(() => {
     if (filterid.id && filterid.name) {
       fetchQuestions1();
@@ -153,12 +267,17 @@ function QuestionBankPage() {
     }
   }, [filterid]);
 
-  // useEffect(() => {
-  //   if (sessionerr == true) {
-  //     localStorage.clear();
-  //     router.push("/");
-  //   }
-  // }, [sessionerr]);
+  useEffect(() => {
+    // Announce the expanded chapter/article name and the total number of
+    // questions now available, once loading has finished. isActive is the
+    // existing loading flag set/cleared inside fetchQuestions1.
+    if (filterid.id && filterid.name && !isActive) {
+      const count = questions?.length ?? 0;
+      setExpandAnnouncement(
+        `${filterid.name} expanded. ${count} question${count === 1 ? "" : "s"} available.`,
+      );
+    }
+  }, [questions, isActive, filterid]);
 
   useEffect(() => {
     if (questions) {
@@ -166,13 +285,7 @@ function QuestionBankPage() {
     }
   }, [questions]);
 
-  useEffect(() => {
-    if (solutionSet.length > 0) {
-      printSolutionSet();
-    }
-  }, [solutionSet]);
-
-
+  // useEffect for solutionSet printing removed in favor of direct execution in handlePrintSolutionSet
 
   useEffect(() => {
     if (tagData.length > 0) {
@@ -180,21 +293,100 @@ function QuestionBankPage() {
     }
   }, [tagData]);
 
+  useEffect(() => {
+    if (!show || !previewContentRef.current) return;
+
+    typesetMathInDocument(document, [previewContentRef.current], true);
+    const retryTimer1 = setTimeout(() => {
+      typesetMathInDocument(document, [previewContentRef.current], true);
+    }, 300);
+    const retryTimer2 = setTimeout(() => {
+      typesetMathInDocument(document, [previewContentRef.current], true);
+    }, 900);
+
+    return () => {
+      clearTimeout(retryTimer1);
+      clearTimeout(retryTimer2);
+    };
+  }, [show, previewQues, previewCorrectAnswer, previewSolution]);
+
+  useEffect(() => {
+    const getFirstFocusableQuizControl = () => {
+      const focusableSelectors = [
+        "button:not([disabled])",
+        "[href]",
+        "input:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        '[tabindex]:not([tabindex="-1"])',
+      ].join(",");
+
+      return Array.from(
+        quizPanelRef.current?.querySelectorAll(focusableSelectors) || [],
+      ).find((element) => {
+        const tabIndex = Number(element.getAttribute("tabindex"));
+        const isHidden =
+          element.offsetParent === null &&
+          getComputedStyle(element).position !== "fixed";
+
+        return Number.isNaN(tabIndex) || tabIndex >= 0 ? !isHidden : false;
+      });
+    };
+
+    const handlePanelNavigation = (event) => {
+      if (
+        event.key !== "F6" ||
+        !event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        event.repeat
+      ) {
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      const isInQuestionBank =
+        questionBankPanelRef.current?.contains(activeElement);
+      const isInQuiz = quizPanelRef.current?.contains(activeElement);
+
+      if (isInQuestionBank) {
+        event.preventDefault();
+        lastQuestionBankFocusRef.current = activeElement;
+        getFirstFocusableQuizControl()?.focus();
+      } else if (isInQuiz) {
+        event.preventDefault();
+        const previousQuestionBankFocus = lastQuestionBankFocusRef.current;
+        const focusTarget =
+          previousQuestionBankFocus?.isConnected &&
+            questionBankPanelRef.current?.contains(previousQuestionBankFocus)
+            ? previousQuestionBankFocus
+            : questionBankPanelRef.current;
+
+        focusTarget?.focus({ preventScroll: true });
+      }
+    };
+
+    document.addEventListener("keydown", handlePanelNavigation);
+    return () => document.removeEventListener("keydown", handlePanelNavigation);
+  }, []);
+
   //function to refresh page
   function refreshPage() {
-    localStorage.setItem("SpecificQuizId", "");
-    window.location.reload();
+    sessionStorage.setItem("SpecificQuizId", "");
+    setname("");
+    settitle("");
+    setSelectedQuestions([]);
+    setSelectedQuestionIds([]);
+    //window.location.reload();
   }
 
   const updateQuestionsToLatestQuestions = async (token, questionIds) => {
-
-    
-
-    const questionIdsData = { questionIds: questionIds };
+    const SpecificQuizId = sessionStorage.getItem("SpecificQuizId");
+    const questionIdsData = { questionIds: questionIds, id: SpecificQuizId };
 
     try {
       const data = await fetch(
-         process.env.API_URL+"api/updateQuestionContentToLatest",
+        process.env.API_URL + "api/updateQuestionContentToLatest",
         {
           credentials: "include",
           method: "POST",
@@ -203,18 +395,19 @@ function QuestionBankPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(questionIdsData),
-        }
+        },
       );
       const result = await data.json();
-      console.log('result', result);
-      
+      const { latestQuestionIds } = result;
+      if (result?.latestQuestionIds?.length) {
+        sessionStorage.setItem("PrevQuesIds", [result?.latestQuestionIds]);
+      }
     } catch (err) {
       console.log(err);
     }
-  }
+  };
 
   function generateTagName(tagid) {
-
     if (tagid == 10) {
       return "Easy";
     } else if (tagid == 14) {
@@ -227,12 +420,11 @@ function QuestionBankPage() {
   }
 
   function generateTagId(tagName) {
-    console.log('tagName', tagName);
-    if (tagName == 'easy' || tagName == 'Easy') {
+    if (tagName == "easy" || tagName == "Easy") {
       return 10;
-    } else if (tagName == 'medium' || tagName == 'Medium') {
+    } else if (tagName == "medium" || tagName == "Medium") {
       return 14;
-    } else if (tagName == 'hard' || tagName == 'Hard') {
+    } else if (tagName == "hard" || tagName == "Hard") {
       return 17;
     } else {
       return "-";
@@ -240,8 +432,11 @@ function QuestionBankPage() {
   }
 
   function handleCategoryChange(category) {
-
     if (category) {
+      const scrollDiv = document.querySelector(`.${styles.sec2}`);
+      if (scrollDiv) {
+        scrollDiv.scrollTop = 0;
+      }
 
       if (selectedQuestions.length > 0) {
         Swal.fire({
@@ -258,108 +453,88 @@ function QuestionBankPage() {
         }).then((result) => {
           if (result.isConfirmed) {
             // Custom function for Save button
-            openDialogBoxBeforeSave()
+            openDialogBoxBeforeSave();
 
             // savequiz();
           } else if (result.isDenied) {
             // Custom function for Don't Save button
-            //refreshPage();
 
-            localStorage.setItem("QuizName", "");
-            localStorage.setItem("QuizTitle", "");
-            localStorage.setItem("QuizDate", "");
-            localStorage.setItem("PrevQuesIds", "");
-            localStorage.setItem("QuizYear", "");
-            localStorage.setItem("SpecificQuizId", "");
+            //refreshPage();
+            sessionStorage.setItem("QuizName", "");
+            sessionStorage.setItem("QuizTitle", "");
+            sessionStorage.setItem("QuizDate", "");
+            sessionStorage.setItem("PrevQuesIds", "");
+            sessionStorage.setItem("QuizYear", "");
+            sessionStorage.setItem("SpecificQuizId", "");
             ////////////// remove selected question from selected year ///////////////
-            setSelectedQuestions([])
+            setSelectedQuestions([]);
 
             /////////////// change year ///////////////
-            setSingleQuestinCategory('')
-            setname('')
+            setSingleQuestinCategory("");
+            setname("");
             setcategoryToggle(category);
-            settname('All')
+            settname("All");
             postCategory(category);
             setfilterid({});
-            setSelectableRandomQuestion(0)
-            setQuestions([])
-            setAllQuestions([])
+            setSelectableRandomQuestion(0);
+            setQuestions([]);
+            setAllQuestions([]);
             notify("Category changed to " + category);
           } else {
             // Custom function for Cancel button
           }
         });
-
       } else {
-
-        setSingleQuestinCategory('')
-        setname('')
+        setSingleQuestinCategory("");
+        setname("");
         setcategoryToggle(category);
-        settname('All')
+        settname("All");
         postCategory(category);
         setfilterid({});
-        setSelectableRandomQuestion(0)
-        setQuestions([])
-        setAllQuestions([])
+        setSelectableRandomQuestion(0);
+        setQuestions([]);
+        setAllQuestions([]);
 
         notify("Category changed to " + category);
       }
     }
   }
-  // function removeButtonsFromHTML(htmlString) {   //function to remove only buttons from solutions html
-  //   const parser = new DOMParser();
-  //   const doc = parser.parseFromString(htmlString, "text/html");
-
-  //   const buttons = doc.querySelectorAll("button");
-  //   buttons.forEach((button) => button.remove());
-
-  //   const modifiedHTMLString = doc.body.innerHTML;
-  //   return modifiedHTMLString;
-  // }
-
-
-
 
   //function to fetch data for difficulty filter
   async function handleDifficulty(tagType) {
-    console.log('tagType', tagType);
-
     if (filterCountTrack.name == tagType && filterCountTrack.count == 1) {
       warn("Already filtered");
     } else {
       settname(tagType);
-      console.log('allQuestions', allQuestions);
-
       if (allQuestions.length > 0) {
         try {
           setisActive(true);
-          const tagdataid = generateTagId(tagType)
-          console.log('tagdataid', tagdataid);
-          const filter_question = allQuestions.filter((item) => item.tagid == tagdataid);
+          const tagdataid = generateTagId(tagType);
+          const filter_question = allQuestions.filter(
+            (item) => item.tagid == tagdataid,
+          );
           if (filter_question?.length) {
-            setQuestions(filter_question)
-            setSelectableRandomQuestion(filter_question?.length)
+            setQuestions(filter_question);
+            setSelectableRandomQuestion(filter_question?.length);
+
+            setDifficultyMessage(`${tagType} questions filter applied.`);
+
             notify("Questions Filtered");
           } else {
-            setQuestions([])
-            setSelectableRandomQuestion(0)
-            //notify("No " + tagType + " questions in category");
-            warn("No " + tagType + " questions in category", "Category Empty");
+            setQuestions([]);
+            setSelectableRandomQuestion(0);
+
+            setDifficultyMessage(`No ${tagType} questions available.`);
+
+            warn(
+              "No " + tagType + " questions in this category",
+              "Category Empty",
+            );
           }
-
-          // const tag = await fetch(
-          //   process.env.API_URL+`api/tags?tag=${tagType}`
-          // );
-          // const tags = await tag.json();
-
-          // settagData(tags);
           setisActive(false);
-
         } catch (error) {
           console.log("error while fetching");
         }
-      } else {
-        //warn("No questions to filter. Please select any category!!", "Sorry!!");
       }
     }
   }
@@ -368,8 +543,8 @@ function QuestionBankPage() {
     if (name == "Open") {
       if (selectedQuestions.length > 0) {
         Swal.fire({
-          title: "Save your changes to this quiz ?",
-          text: "Do you want to save your changes before leaving this page!",
+          title: "Save before leaving ?",
+          text: "Do you want to save your quiz before leaving this page!",
           icon: "warning",
           showDenyButton: true,
           showCancelButton: true,
@@ -380,21 +555,21 @@ function QuestionBankPage() {
           cancelButtonText: "Cancel",
         }).then(async (result) => {
           if (result.isConfirmed) {
-            // Custom function for Save button
-            // savequiz();
-            openDialogBoxBeforeSave()
+            setButtonAction({ ...buttonAction, open: true });
           } else if (result.isDenied) {
             const checkQuiz = await checkQuizData();
-            localStorage.setItem("QuizName", "");
-            localStorage.setItem("QuizTitle", "");
-            localStorage.setItem("QuizDate", "");
-            localStorage.setItem("PrevQuesIds", "");
-            localStorage.setItem("QuizYear", "");
-            localStorage.setItem("SpecificQuizId", "");
+            sessionStorage.setItem("QuizName", "");
+            sessionStorage.setItem("QuizTitle", "");
+            sessionStorage.setItem("QuizDate", "");
+            sessionStorage.setItem("PrevQuesIds", "");
+            sessionStorage.setItem("QuizYear", "");
+            sessionStorage.setItem("SpecificQuizId", "");
+
+            setSelectedQuestions([]);
             if (checkQuiz) {
               router.push("/MyQuiz");
             } else {
-              warn("You dont have any saved quiz.", "Sorry!!");
+              warn("No Saved Quizzes", "");
             }
           } else {
             // Custom function for Cancel button
@@ -409,14 +584,14 @@ function QuestionBankPage() {
           router.push("/MyQuiz");
         } else {
           setisActive(false);
-          warn("You dont have any saved quiz.", "Sorry!!");
+          warn("No Saved Quizzes", "");
         }
       }
     } else {
       if (selectedQuestions.length > 0) {
         Swal.fire({
-          title: "Save your changes to this quiz?",
-          text: "Do you want to save your changes before loading new instance!",
+          title: "Save your quiz?",
+          text: "Do you want to save your quiz before loading new instance!",
           icon: "warning",
           showDenyButton: true,
           showCancelButton: true,
@@ -428,17 +603,18 @@ function QuestionBankPage() {
         }).then((result) => {
           if (result.isConfirmed) {
             // Custom function for Save button
-            openDialogBoxBeforeSave()
 
+            setButtonAction({ ...buttonAction, new: true });
+            setSelectedQuestions([]);
             // savequiz();
           } else if (result.isDenied) {
             // Custom function for Don't Save button
-            localStorage.setItem("QuizName", "");
-            localStorage.setItem("QuizTitle", "");
-            localStorage.setItem("QuizDate", "");
-            localStorage.setItem("PrevQuesIds", "");
-            localStorage.setItem("QuizYear", "");
-            localStorage.setItem("SpecificQuizId", "");
+            sessionStorage.setItem("QuizName", "");
+            sessionStorage.setItem("QuizTitle", "");
+            sessionStorage.setItem("QuizDate", "");
+            sessionStorage.setItem("PrevQuesIds", "");
+            sessionStorage.setItem("QuizYear", "");
+            sessionStorage.setItem("SpecificQuizId", "");
             refreshPage();
           } else {
             // Custom function for Cancel button
@@ -484,17 +660,15 @@ function QuestionBankPage() {
       if (matchingObjects.length > 0) {
         setfilterCountTrack({ name: tname, count: 1 });
         setQuestions(matchingObjects);
-        setSelectableRandomQuestion(matchingObjects.length)
+        setSelectableRandomQuestion(matchingObjects.length);
         notify("Questions Filtered");
       } else {
-        // settname(filterCountTrack.name);
         setQuestions([]);
-        setSelectableRandomQuestion(0)
-        //notify("No " + tname + " questions in category");
-        warn("No " + tname + " questions in category", "Category Empty");
+        setSelectableRandomQuestion(0);
+        warn("No " + tname + " questions in this category", "Category Empty");
       }
     } else {
-      warn("Cannot Filter the questions.", "Sorry!!");
+      warn("Cannot filter questions.", "");
     }
   }
 
@@ -517,50 +691,363 @@ function QuestionBankPage() {
     const modifiedHTMLString = doc.body.innerHTML;
     return modifiedHTMLString;
   }
+
+  function getMathJaxConfigScript() {
+    return `<script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['\\\\(', '\\\\)'], ['$', '$']],
+          displayMath: [['\\\\[', '\\\\]'], ['$$', '$$']],
+          processEscapes: true
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      };
+    </script>`;
+  }
+
+  function typesetMathInDocument(
+    targetDocument,
+    elements = null,
+    force = false,
+  ) {
+    if (!targetDocument || !targetDocument.defaultView) {
+      return Promise.resolve();
+    }
+
+    const runTypeset = () => {
+      const availableMathJax = targetDocument.defaultView?.MathJax;
+      if (
+        availableMathJax &&
+        typeof availableMathJax.typesetPromise === "function"
+      ) {
+        const targets = elements?.length ? elements : undefined;
+        if (force && typeof availableMathJax.typesetClear === "function") {
+          availableMathJax.typesetClear(targets);
+        }
+        return availableMathJax
+          .typesetPromise(targets)
+          .catch((err) => console.log("MathJax typeset error:", err));
+      }
+      return null;
+    };
+
+    const promise = runTypeset();
+    if (promise) return promise;
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      const done = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+
+      const existingScript = targetDocument.getElementById("mathjax-script");
+      if (existingScript) {
+        existingScript.addEventListener(
+          "load",
+          () => {
+            const p = runTypeset();
+            if (p) p.then(done);
+            else done();
+          },
+          { once: true },
+        );
+        setTimeout(() => {
+          const p = runTypeset();
+          if (p) p.then(done);
+          else done();
+        }, 300);
+        setTimeout(() => {
+          const p = runTypeset();
+          if (p) p.then(done);
+          else done();
+        }, 1200);
+        setTimeout(done, 2500);
+        return;
+      }
+
+      if (!targetDocument.getElementById("mathjax-config-script")) {
+        const configScript = targetDocument.createElement("script");
+        configScript.id = "mathjax-config-script";
+        configScript.text = `
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\\\(', '\\\\)'], ['$', '$']],
+              displayMath: [['\\\\[', '\\\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+            }
+          };
+        `;
+        targetDocument.head.appendChild(configScript);
+      }
+
+      const script = targetDocument.createElement("script");
+      script.id = "mathjax-script";
+      script.async = true;
+      script.src = mathJaxScriptSrc;
+      script.onload = () => {
+        const p = runTypeset();
+        if (p) p.then(done);
+        else done();
+      };
+      script.onerror = done;
+      targetDocument.head.appendChild(script);
+
+      setTimeout(done, 3000);
+    });
+  }
+
+  const printViaIframe = async (htmlContent) => {
+    let iframe = document.getElementById("snapz-print-iframe");
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "snapz-print-iframe";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.style.visibility = "hidden";
+      document.body.appendChild(iframe);
+    }
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+    iframeDoc.open();
+    iframeDoc.write(htmlContent);
+    iframeDoc.close();
+
+    const waitForStylesheets = () => {
+      const links = Array.from(
+        iframeDoc.querySelectorAll('link[rel="stylesheet"]'),
+      );
+      return Promise.all(
+        links.map((link) => {
+          if (link.sheet) return Promise.resolve();
+          return new Promise((resolve) => {
+            link.onload = resolve;
+            link.onerror = resolve;
+            setTimeout(resolve, 1000);
+          });
+        }),
+      );
+    };
+
+    const waitForImages = () => {
+      const images = Array.from(iframeDoc.images || []);
+      return Promise.all(
+        images.map((img) => {
+          if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+            setTimeout(resolve, 1000);
+          });
+        }),
+      );
+    };
+
+    try {
+      await waitForStylesheets();
+      await typesetMathInDocument(iframeDoc);
+      await waitForImages();
+      if (iframeDoc.fonts && iframeDoc.fonts.ready) {
+        await iframeDoc.fonts.ready;
+      }
+    } catch (err) {
+      console.log("Error preparing iframe print:", err);
+    }
+
+    setTimeout(() => {
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      }
+    }, 150);
+  };
+
+  function escapeHtmlForPrint(text) {
+    return String(text ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function normalizeLatexForPreview(htmlContent) {
+    if (typeof htmlContent !== "string") return "";
+    return htmlContent
+      .replace(/\\\\\(/g, "\\(")
+      .replace(/\\\\\)/g, "\\)")
+      .replace(/\\\\\[/g, "\\[")
+      .replace(/\\\\\]/g, "\\]");
+  }
+
+  function getQuestionTextForSolutionPrint(questionText) {
+    let extractedText = extractQuestionForAllCategory(questionText || "");
+    extractedText = extractedText
+      .replace(/QID[:\s-]*\d{2}[-–]{1,2}\d{5}/gi, "")
+      .replace(/^Question\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return extractedText;
+  }
+
+  function cleanSolutionText(htmlString) {
+  if (!htmlString) return "";
+  try {
+    return htmlString.replace(
+      /<p class="text-center">The correct answer is:.*?<\/p>/,
+      ""
+    );
+  } catch (error) {
+    return htmlString;
+  }
+}
+
+  function getChoicesForSolutionPrint(question) {
+    const uniqueAnswers = removeDuplicatesFromArrayOfObjectByObjKey(
+      getQuestionAnswers(question),
+    );
+
+    return uniqueAnswers.map((answer, index) => {
+      const letter = String.fromCharCode(65 + index);
+      const answerHtml = getAnswerHtml(answer);
+      const optionText =
+        extractOptionText(answerHtml) || extractAnswerText(answerHtml);
+
+      return {
+        letter,
+        answerId: answer?.answer_id,
+        optionText: optionText?.replace(/\s+/g, " ").trim(),
+      };
+    });
+  }
+
   //function to print the solution set
-  const printSolutionSet = () => {
+  const printSolutionSet = (solutionsData = null) => {
+    const dataToUse = solutionsData || solutionSet;
+    if (!selectedQuestions || selectedQuestions.length === 0) return;
+
     const printContent = selectedQuestions
       .map((question, index) => {
-
-        let questionText = question.question_text.replace(/<summary>Question<\/summary>\s*/, `<summary>Question  ${index + 1}<\/summary>`);
-
-        const solutions = removeButtonsAndElementsWithId(
-          solutionSet[index].general_feedback
+        const questionText = getQuestionTextForSolutionPrint(
+          question.question_text,
         );
-        return `<div className="container"><span className="questionText"> ${questionText}</span> <br/><br>${solutions}</div><br/><br/>`;
+        const choices = getChoicesForSolutionPrint(question);
+        const correctChoice = choices.find(
+          (choice) =>
+            String(choice.answerId) === String(question.correct_answer),
+        );
+
+        const solutionItem =
+          dataToUse?.find(
+            (s) =>
+              String(s?.question_id || s?.id) === String(question.question_id),
+          ) || dataToUse?.[index];
+
+        const rawSolutionHtml = solutionItem?.general_feedback || "";
+        const solutionHtml = removeButtonsAndElementsWithId(rawSolutionHtml);
+
+        const choicesHtml = choices
+          .map(
+            (choice) =>
+              `<div><strong>${choice.letter}.</strong> ${escapeHtmlForPrint(
+                choice.optionText,
+              )}</div>`,
+          )
+          .join("");
+
+        return `
+          <div class="container solution-print-block">
+            <div class="question-label"><strong>Question ${index + 1}:</strong></div>
+            <div class="question-text">${escapeHtmlForPrint(questionText)}</div>
+            <div class="choices-box">${choicesHtml}</div>
+            <div class="correct-answer-box"><strong>Correct Answer- ${correctChoice?.letter || "-"}.</strong></div>
+            <div class="solution-content">${solutionHtml}</div>
+          </div>
+          <br/>
+        `;
       })
       .join("");
 
-    const printWindow = window.open("", "Print", "height=720,width=1280");
-    if (printWindow) {
-      printWindow.document.write(
-        `<html><head><title></title><style>
-        .topHeadingQuizPage{
-          text-align:center;
-          text-transform:capitalise;
-        }
-        @media print {
-          .container {
-            
-            page-break-inside: avoid;
-          }
-          
-        }</style><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous"><link rel="stylesheet" href="https://snapz.com/wp-content/uploads/snapz-print.css">
-        </head><body><h1 className="topHeadingQuizPage">${name}</h1><br/>${printContent}</body></html>`
-      );
-      printWindow.document.close();
-      printWindow.print();
-    } else {
-      //warn("Popup blocked in browser");
-    }
+    const titleHtml = name?.trim()
+      ? `<h1 class="topHeadingQuizPage">${escapeHtmlForPrint(name)}</h1>`
+      : "";
+
+    const htmlContent = `<!DOCTYPE html>
+      <html>
+        <head>
+          <title>${name?.trim() ? escapeHtmlForPrint(name) + " - Solutions" : "Solutions"}</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 15px 24px;
+              font-family: system-ui, -apple-system, sans-serif;
+            }
+            .topHeadingQuizPage{
+              text-align:center;
+              text-transform:none;
+              margin-bottom: 20px;
+            }
+            .solution-print-block {
+              margin-bottom: 22px;
+            }
+            .question-label {
+              display: inline-block;
+              margin-bottom: 10px;
+            }
+            .question-text {
+              margin-bottom: 10px;
+            }
+            .choices-box {
+              margin-bottom: 10px;
+            }
+            .choices-box div {
+              margin: 2px 0;
+            }
+            .correct-answer-box {
+              display: inline-block;
+              margin-bottom: 12px;
+            }
+            .solution-content {
+              margin-top: 8px;
+            }
+            @media print {
+              .container {
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+          <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+          <link rel="stylesheet" href="https://snapz.com/wp-content/uploads/snapz-print.css">
+          ${getMathJaxConfigScript()}
+          <script id="mathjax-script" async src="${mathJaxScriptSrc}"></script>
+        </head>
+        <body>
+          ${titleHtml}
+          ${printContent}
+        </body>
+      </html>`;
+
+    printViaIframe(htmlContent);
   };
   //function to fetch solution set for selected questions
   const handlePrintSolutionSet = async () => {
     if (selectedQuestions.length > 0) {
-      token = localStorage.getItem("token");
+      token = sessionStorage.getItem("token");
       setisActive(true);
       var filteredIds = [];
-      selectedQuestions.filter((item) => filteredIds.push(item.question_id))
+      selectedQuestions.filter((item) => filteredIds.push(item.question_id));
       try {
         const solution = await fetch(
           process.env.API_URL + `api/generalfeedback?ids=${filteredIds}`,
@@ -570,19 +1057,18 @@ function QuestionBankPage() {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`, // Include the JWT token in the Authorization header
             },
-          }
+          },
         );
         const solutions = await solution.json();
 
         setsolutionSet(solutions);
-
         setisActive(false);
+        printSolutionSet(solutions);
       } catch (err) {
-
         setisActive(false);
       }
     } else {
-      warn("Please select some questions first", "Sorry!!");
+      warn("Select questions first", "");
     }
   };
 
@@ -597,17 +1083,18 @@ function QuestionBankPage() {
   }
 
   const notify = (data) => {
-    toast.success(data, { bodyClassName: "custom-toast-body", position: toast.POSITION.TOP_CENTER, });
+    toast.success(data, {
+      bodyClassName: "custom-toast-body",
+      position: toast.POSITION.TOP_CENTER,
+    });
   };
   const warn = (data, message = null) => {
-    Swal.fire(message ? message : "Error!", data, "warning");
-    //toast.warning(data, { bodyClassName: "custom-toast-body", position: toast.POSITION.TOP_CENTER, });
+    Swal.fire(message ? message : "", data, "warning");
   };
 
   const showReplacePopUp = (foundQuiz) => {
-
-    token = localStorage.getItem("token");
-    const username = localStorage.getItem("user");
+    token = sessionStorage.getItem("token");
+    const username = sessionStorage.getItem("user");
 
     const num = SelectedQuestionIds.length;
 
@@ -618,10 +1105,8 @@ function QuestionBankPage() {
         quizDate = convertDateFormatToYYYYMMDD(quizStateDate);
       }
     }
-    console.log('foundQuiz showReplacePopUp', foundQuiz);
-
     Swal.fire({
-      title: "Replace Quiz?",
+      title: "Replace your quiz?",
       text: "A quiz by that name already exists. Do you want to replace it?",
       icon: "warning",
       showDenyButton: true,
@@ -630,76 +1115,56 @@ function QuestionBankPage() {
       cancelButtonColor: "#d33",
       confirmButtonText: "Yes",
       denyButtonText: `No`,
-      cancelButtonText: "No",
+      cancelButtonText: "Cancel",
     }).then((result) => {
-      console.log('result', result);
-
       if (result.isConfirmed) {
         // Custom function for Save button
-
+        let todayDate = moment().tz(currentTimezone).format("YYYY-MM-DD");
         const quizData = {
-
-          quizName: name,
+          quizName: foundQuiz.quiz_name,
           questionIds: SelectedQuestionIds,
           number_ques: num,
           title: title,
           username: username,
-          Date: quizDate,
+          Date: todayDate,
           quiz_year: categoryToggle,
-          id: foundQuiz.quiz_id
+          id: foundQuiz.quiz_id,
         };
-        console.log('quizData', quizData);
 
         ///////////// Update quiz  //////////////////////
-        quizUpdate(quizData)
-
+        quizUpdate(quizData);
       } else if (result.isDenied) {
         // Custom function for Don't Save button
-        //refreshPage();
-        console.log("no button hit")
-        openDialogBoxBeforeSave()
 
+        openDialogBoxBeforeSave();
       } else {
         // Custom function for Cancel button
       }
     });
-  }
+  };
 
   const updateQuiz = () => {
     updateQuizData();
-  }
-
-
+  };
 
   const openDialogBoxBeforeSave = () => {
-    //if (name != "" && title != "" && quizStateDate != "") {
-    const PrevQuesIds = localStorage.getItem("PrevQuesIds");
-    const SpecificQuizId = localStorage.getItem("SpecificQuizId");
+    const PrevQuesIds = sessionStorage.getItem("PrevQuesIds");
 
-    console.log('SpecificQuizId', SpecificQuizId);
+    const SpecificQuizId = sessionStorage.getItem("SpecificQuizId");
 
+    //////////////////// Get All Quizzes ///////////////
 
-
-    //////////////////// Get All Quizzes ///////////////     
-
-    // if(PrevQuesIds){
-    //   //updateQuiz()
-    //   showReplacePopUp()
-    // } else {
     if (SpecificQuizId) {
-      updateQuizData()
+      updateQuizData();
     } else {
-
-      console.log('name', name);
-
       Swal.fire({
-        input: 'text',
+        input: "text",
         inputAttributes: {
-          autocapitalize: 'off'
+          autocapitalize: "off",
         },
         inputLabel: "Quiz name :",
         inputValue: name,
-        text: "Save your changes to this quiz ?",
+        text: "Save your quiz ?",
         showDenyButton: false,
         showCancelButton: true,
         confirmButtonColor: "#3085d6",
@@ -708,71 +1173,48 @@ function QuestionBankPage() {
         //denyButtonText: `Delete`,
         cancelButtonText: "Cancel",
         preConfirm: (inputValue) => {
-          // const exists = allQuizName.includes(toLowerCase(inputValue));          
-
           if (!inputValue) {
-            Swal.showValidationMessage('Quiz name is required.');
+            Swal.showValidationMessage("Quiz name is required.");
           }
           if (!name) {
-            setname(inputValue)
+            setname(inputValue);
           }
-          // setname(inputValue)
         },
       }).then((result) => {
         if (result.isConfirmed) {
-          console.log('allQuizName result', result);
-          // const exists = allQuizName.includes(toLowerCase(result?.value));
-          const foundQuiz = allQuizNameId.find(quiz => quiz.quiz_name === toLowerCase(result?.value));
-          // console.log('allQuizName open exists', PrevQuesIds, foundQuiz);
-          // setname(result?.value)
+          const foundQuiz = allQuizNameId.find(
+            (quiz) => quiz.quiz_name === toLowerCase(result?.value),
+          );
+
           setname((prev) => result?.value);
 
           if (foundQuiz != undefined && foundQuiz.quiz_id != SpecificQuizId) {
-            showReplacePopUp(foundQuiz)
+            showReplacePopUp(foundQuiz);
           } else {
-            // setAllQuizName([...allQuizName, toLowerCase(result?.value)]);
             savequiz(result?.value);
           }
-
-          // } else if (result.isDenied) {
-          //   // Custom function for Don't Save button
-          //   refreshPage();
         } else {
           // Custom function for Cancel button
         }
       });
-      // } 
-
-      // else {
-      //   savequiz();
-      // }
     }
-  }
+  };
 
   const openDialogBoxOnSaveAs = () => {
     //if (name != "" && title != "" && quizStateDate != "") {
-    const PrevQuesIds = localStorage.getItem("PrevQuesIds");
-    const SpecificQuizId = localStorage.getItem("SpecificQuizId");
+    const PrevQuesIds = sessionStorage.getItem("PrevQuesIds");
+    const SpecificQuizId = sessionStorage.getItem("SpecificQuizId");
 
-    console.log('SpecificQuizId', SpecificQuizId);
-
-
-
-    //////////////////// Get All Quizzes ///////////////     
-
-    // if(PrevQuesIds){
-    //   //updateQuiz()
-    //   showReplacePopUp()
-    // } else {
+    //////////////////// Get All Quizzes ///////////////
 
     Swal.fire({
-      input: 'text',
+      input: "text",
       inputAttributes: {
-        autocapitalize: 'off'
+        autocapitalize: "off",
       },
       inputLabel: "Quiz name :",
       inputValue: name,
-      text: "Save your changes to this quiz ?",
+      text: "Save your quiz ?",
       showDenyButton: false,
       showCancelButton: true,
       confirmButtonColor: "#3085d6",
@@ -781,80 +1223,68 @@ function QuestionBankPage() {
       //denyButtonText: `Delete`,
       cancelButtonText: "Cancel",
       preConfirm: (inputValue) => {
-        // const exists = allQuizName.includes(toLowerCase(inputValue));          
-
         if (!inputValue) {
-          Swal.showValidationMessage('Quiz name is required.');
+          Swal.showValidationMessage("Quiz name is required.");
         }
         if (!name) {
-          setname(inputValue)
+          setname(inputValue);
         }
-        // setname(inputValue)
       },
     }).then((result) => {
       if (result.isConfirmed) {
+        const foundQuiz = allQuizNameId.find(
+          (quiz) => quiz.quiz_name === toLowerCase(result?.value),
+        );
+        console.log("foundQuiz", foundQuiz, SpecificQuizId);
 
-        // const exists = allQuizName.includes(toLowerCase(result?.value));
-        const foundQuiz = allQuizNameId.find(quiz => quiz.quiz_name === toLowerCase(result?.value));
-        console.log('allQuizName open exists', PrevQuesIds, foundQuiz);
-        setname(result?.value)
+        setname(result?.value);
 
         if (foundQuiz != undefined && foundQuiz.quiz_id != SpecificQuizId) {
-          showReplacePopUp(foundQuiz)
+          showReplacePopUp(foundQuiz);
         } else {
-          // setAllQuizName([...allQuizName, toLowerCase(result?.value)]);
+          console.log("foundQuiz 1savequiz", result?.value);
           savequiz(result?.value);
         }
-
-        // } else if (result.isDenied) {
-        //   // Custom function for Don't Save button
-        //   refreshPage();
       } else {
         // Custom function for Cancel button
       }
     });
-    // } 
-
-    // else {
-    //   savequiz();
-    // }
-  }
-
-
+  };
 
   const savequiz = async (quizNameFromPopUp = null) => {
-    console.log('name', allQuizName);
-
+    // console.log("save fucntion hit");
 
     if (selectedQuestions.length == 0) {
-      warn("Quiz is empty.", "Sorry!!");
+      warn("Quiz is empty.", "");
     } else {
-
       //////////////// quiz save code start /////////////
 
-      token = localStorage.getItem("token");
-      const username = localStorage.getItem("user");
+      token = sessionStorage.getItem("token");
+      const username = sessionStorage.getItem("user");
 
       const num = SelectedQuestionIds.length;
-      let currentQuizName = quizNameFromPopUp != null ? toLowerCase(quizNameFromPopUp) : toLowerCase(name);
-
+      // ---------------------
+      let currentQuizName =
+        quizNameFromPopUp != null ? quizNameFromPopUp : name;
+      let currentQuizNameLower = toLowerCase(currentQuizName);
+      // ---------------------
+      let todayDate = moment().tz(currentTimezone).format("YYYY-MM-DD");
       const quizData = {
         quizName: currentQuizName,
         questionIds: SelectedQuestionIds,
         number_ques: num,
         title: title,
         username: username,
-        Date: quizStateDate,
-        quiz_year: categoryToggle
-      }
-
+        Date: todayDate,
+        quiz_year: categoryToggle,
+      };
+      console.log("save fucntion hit currentQuizName", currentQuizName);
       ///////////// quiz name is same but questions is updated //////////////////////
-      if (currentQuizName == '') {
-
+      if (currentQuizName == "") {
         Swal.fire({
-          input: 'text',
+          input: "text",
           inputAttributes: {
-            autocapitalize: 'off'
+            autocapitalize: "off",
           },
           inputLabel: "Quiz name :",
           inputValue: name,
@@ -864,138 +1294,158 @@ function QuestionBankPage() {
           confirmButtonColor: "#3085d6",
           cancelButtonColor: "#d33",
           confirmButtonText: "Save",
-          //denyButtonText: `Delete`,
           cancelButtonText: "Cancel",
           preConfirm: (inputValue) => {
             const exists = allQuizName.includes(toLowerCase(inputValue));
             if (!inputValue) {
-              Swal.showValidationMessage('You need to enter Quiz name!');
+              Swal.showValidationMessage("You need to enter Quiz name!");
             } else if (exists) {
-              Swal.showValidationMessage('You need to change Quiz name. This is already exist');
+              Swal.showValidationMessage(
+                "You need to change Quiz name. This is already exist",
+              );
             }
           },
         }).then((result) => {
           if (result.isConfirmed) {
             const exists = allQuizName.includes(toLowerCase(result?.value));
-            setname(result?.value)
+            setname(result?.value);
             if (exists) {
-              Swal.showValidationMessage('You need to change Quiz name. This is already exist');
+              Swal.showValidationMessage(
+                "You need to change Quiz name. This is already exist",
+              );
             } else {
-              setAllQuizName([...allQuizName, toLowerCase(result?.value)]);
+              setAllQuizName([...allQuizName, result?.value]);
 
               savequiz(result?.value);
             }
           }
         });
-
       } else {
-        const exists = allQuizName.includes(toLowerCase(currentQuizName));
+        console.log("save fucntion hit else case");
+        // ---------------------
+        const exists = allQuizName.includes(currentQuizNameLower);
+        const foundQuiz = allQuizNameId.find(
+          (quiz) => quiz.quiz_name?.toLowerCase() === currentQuizNameLower,
+        );
+        // ---------------------
+        console.log("save fucntion hit else case", exists, foundQuiz);
+        if (foundQuiz != undefined) {
+          Swal.showValidationMessage(
+            "You need to change Quiz name. This is already exist",
+          );
 
-        if (exists) {
-          Swal.showValidationMessage('You need to change Quiz name. This is already exist');
+          showReplacePopUp(foundQuiz);
         } else {
-          setAllQuizName([...allQuizName, toLowerCase(currentQuizName)]);
-          quizSaveApiHit(quizData)
+          // -------------------
+          setAllQuizName([...allQuizName, currentQuizNameLower]);
+          // -------------------
+          quizSaveApiHit(quizData);
         }
-
       }
     }
-  }
+  };
 
-  const quizSaveApiHit = (quizData) => {
-    //////////////// quiz save code start //////////////  
-
-    token = localStorage.getItem("token");
+  const quizSaveApiHit = async (quizData) => {
+    token = sessionStorage.getItem("token");
     setisActive(true);
 
-    fetch(process.env.API_URL + "api/saveQuiz", {
-      credentials: "include",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(quizData),
-    }).then((response) => {
-      if (response.ok) {
-        return response.json();
-      } else {
-        console.error("Failed to save the quiz:");
-      }
-    }).then((data) => {
-      setisActive(false);
-      //setname('')
-
-
-      setAllQuizName((prevQuizNames) => {
-        const updatedNames = [...prevQuizNames, toLowerCase(quizData?.quizName)];
-        return updatedNames; // Return the new count
+    try {
+      const response = await fetch(process.env.API_URL + "api/saveQuiz", {
+        credentials: "include",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(quizData),
       });
 
-      ///// Update all quiz data to current state//////////
+      const data = await response.json();
 
-      const quizUserName = localStorage.getItem("user");
-      fetchQuiz(token, quizUserName)
+      if (!response.ok) {
+        const errorMsg = data.error || "Failed to save the quiz.";
+        setisActive(false);
+        warn(errorMsg, "Error");
+        return; 
+      }
+
+      sessionStorage.setItem("QuizName", "");
+      sessionStorage.setItem("QuizTitle", "");
+      sessionStorage.setItem("QuizDate", "");
+      sessionStorage.setItem("PrevQuesIds", "");
+      sessionStorage.setItem("QuizYear", "");
+      sessionStorage.setItem("SpecificQuizId", "");
+
+      setisActive(false);
+      setAllQuizName((prev) => [...prev, quizData?.quizName]);
+
+      const quizUserName = sessionStorage.getItem("user");
+      await fetchQuiz(token, quizUserName);
 
       notify("Quiz saved.");
-      //refreshPage();
-    }).catch((error) => {
+
+      if (buttonAction.open) {
+        setButtonAction({ ...buttonAction, open: false });
+        router.push("/MyQuiz");
+      }
+      if (buttonAction.new) {
+        setButtonAction({ ...buttonAction, new: false });
+        refreshPage();
+      }
+    } catch (error) {
       setisActive(false);
       console.error("Error saving the quiz:", error);
-    });
-
-    //////////////// quiz save code end //////////////
-  }
+      warn("An unexpected error occurred while saving the quiz.", "Error");
+    }
+  };
 
   const updateQuizData = async (quizNameFromPopUp = null) => {
-
     if (selectedQuestions.length == 0) {
-      warn("Quiz is empty.", "Sorry!!");
+      warn("Quiz is empty.", "");
     } else {
-      //////////////// quiz save code start //////////////        
+      //////////////// quiz save code start //////////////
 
-      token = localStorage.getItem("token");
-      const username = localStorage.getItem("user");
-      const SpecificQuizId = localStorage.getItem("SpecificQuizId");
+      token = sessionStorage.getItem("token");
+      const username = sessionStorage.getItem("user");
+      const SpecificQuizId = sessionStorage.getItem("SpecificQuizId");
 
       const num = SelectedQuestionIds.length;
-      let currentQuizName = quizNameFromPopUp != null ? toLowerCase(quizNameFromPopUp) : toLowerCase(name);
+      // -------------------
+      let currentQuizName =
+        quizNameFromPopUp != null ? quizNameFromPopUp : name;
+      let currentQuizNameLower = toLowerCase(currentQuizName);
+      // -------------------
 
       let checkDateFormat = isValidYYmmddFormat(quizStateDate);
 
-      console.log('checkDateFormat1', checkDateFormat, quizStateDate);
-
       let quizDate = quizStateDate;
-      console.log('checkDateFormat1 quizDate', quizDate);
 
       if (quizDate && !checkDateFormat) {
         quizDate = convertDateFormatToYYYYMMDD(quizStateDate);
       }
+      let todayDate = moment().tz(currentTimezone).format("YYYY-MM-DD");
       const quizData = {
-
         quizName: currentQuizName,
         questionIds: SelectedQuestionIds,
         number_ques: num,
         title: title,
         username: username,
-        Date: quizDate,
+        Date: todayDate,
         quiz_year: categoryToggle,
-        id: SpecificQuizId
+        id: SpecificQuizId,
       };
-      // console.log('quizData', quizData, checkDateFormat);
 
       ///////////// Update quiz  //////////////////////
-      quizUpdate(quizData)
-
+      quizUpdate(quizData);
     }
-  }
+  };
 
-  const quizUpdate = (quizData) => {
-    //////////////// quiz update code start //////////////        
+ const quizUpdate = async (quizData) => {
+  token = sessionStorage.getItem("token");
+  setisActive(true);
 
-    token = localStorage.getItem("token");
-    setisActive(true);
-    fetch(process.env.API_URL + "api/updateQuiz", {
+  try {
+    const response = await fetch(process.env.API_URL + "api/updateQuiz", {
       credentials: "include",
       method: "POST",
       headers: {
@@ -1003,52 +1453,52 @@ function QuestionBankPage() {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(quizData),
-
-    }).then((response) => {
-
-      if (response.ok) {
-        localStorage.setItem("QuizName", "");
-        localStorage.setItem("QuizTitle", "");
-        localStorage.setItem("QuizDate", "");
-        localStorage.setItem("PrevQuesIds", "");
-        localStorage.setItem("QuizYear", "");
-        localStorage.setItem("SpecificQuizId", "");
-
-        return response.json();
-      } else {
-        console.error("Failed to update the quiz:");
-      }
-    }).then((data) => {
-      setisActive(false);
-      //setname('')
-      setAllQuizName([...allQuizName, name])
-      localStorage.setItem("QuizName", "");
-      localStorage.setItem("QuizTitle", "");
-      localStorage.setItem("QuizDate", "");
-      localStorage.setItem("PrevQuesIds", "");
-      localStorage.setItem("QuizYear", "");
-      localStorage.setItem("SpecificQuizId", "");
-
-      ///// Update all quiz data to current state//////////
-
-      const quizUserName = localStorage.getItem("user");
-      fetchQuiz(token, quizUserName)
-
-      notify("Quiz updated.");
-      //refreshPage();
-    }).catch((error) => {
-      setisActive(false);
-      console.error("Error updating the quiz:", error);
     });
 
-    //////////////// quiz update code end //////////////
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errorMsg = data.error || "Failed to update the quiz.";
+      setisActive(false);
+      warn(errorMsg, "Error");
+      return;
+    }
+
+    sessionStorage.setItem("QuizName", "");
+    sessionStorage.setItem("QuizTitle", "");
+    sessionStorage.setItem("QuizDate", "");
+    sessionStorage.setItem("PrevQuesIds", "");
+    sessionStorage.setItem("QuizYear", "");
+    sessionStorage.setItem("SpecificQuizId", "");
+
+    setisActive(false);
+    setAllQuizName((prev) => [...prev, name]);
+
+    const quizUserName = sessionStorage.getItem("user");
+    await fetchQuiz(token, quizUserName);
+
+    notify("Quiz updated.");
+
+    if (buttonAction.open) {
+      setButtonAction({ ...buttonAction, open: false });
+      router.push("/MyQuiz");
+    }
+    if (buttonAction.new) {
+      setButtonAction({ ...buttonAction, new: false });
+      refreshPage();
+    }
+  } catch (error) {
+    setisActive(false);
+    console.error("Error updating the quiz:", error);
+    warn("An unexpected error occurred while updating the quiz.", "Error");
   }
+};
 
   const customrandomques2 = () => {
     // This function is triggered from Model component when add to Quiz button is pressed to finally add the questions in Quiz.
     if (randomlimit != "") {
       if (selectedQuestions.length == 100) {
-        warn(" Limit of 100 questions reached, please remove some questions!", "Sorry!!");
+        warn("Limit of 100 questions reached remove some.", "");
       } else {
         setSelectedQuestions(selectedQuestions.concat(randomQues));
         setSelectedQuestionIds(SelectedQuestionIds.concat(randomQuesIds));
@@ -1064,58 +1514,56 @@ function QuestionBankPage() {
     //function runs when SELECT button is pressed. used to select random questions from questions array.
     if (randomlimit != "") {
       if (selectedQuestions.length == 100) {
-        warn(" Limit of 100 questions reached, please remove some questions!", "Sorry!!");
+        warn(
+          " Limit of 100 questions reached, please remove some questions!",
+          "",
+        );
       } else {
         let space = 100 - selectedQuestions.length;
         if (randomlimit <= space) {
           const filteredArray = questions.filter(
-            (item) => !SelectedQuestionIds.includes(item.question_id)
+            (item) => !SelectedQuestionIds.includes(item.question_id),
           );
 
           if (filteredArray.length >= randomlimit) {
             if (filteredArray.length > 0) {
               const randomIndices = generateRandomIndices(
                 filteredArray.length,
-                randomlimit
+                randomlimit,
               );
               let newques = randomIndices.map((index) => filteredArray[index]);
               let newquesIds = newques.map((item) => item.question_id);
               setRandomQues(newques);
               setRandomQuesIds(newquesIds);
-
-              // setSelectedQuestions(selectedQuestions.concat(newques))
-              // setSelectedQuestionIds(SelectedQuestionIds.concat(newquesIds))
-
-              // notify(newques.length + ' questions added in quiz succesfully.')
             } else {
-              warn("The category does not have" + randomlimit + "questions", "Sorry!!");
+              warn("Category does not have" + randomlimit + "questions", "");
             }
           } else {
-            let result = filteredArray.every((item) => selectedQuestions.includes(item));
+            let result = filteredArray.every((item) =>
+              selectedQuestions.includes(item),
+            );
 
             if (result) {
               if (questions.length == 0) {
-                warn("This category is empty!!", "Sorry!!");
+                warn("Category is empty!!", "");
               } else {
                 if (selectedQuestions.length > 0) {
-                  warn("Every question of the category is selected", "Sorry!!");
+                  warn("All category questions are selected.", "");
                   setrandomlimit("");
                 } else {
-                  warn("Please select a catgory.", "Sorry!!");
+                  warn("Select a category.", "");
                   setrandomlimit("");
                 }
               }
             } else {
               warn(
-                "The category has only " +
-                filteredArray.length +
-                " question to select"
+                "Only " + filteredArray.length + " questions in this category",
               );
               setrandomlimit("");
             }
           }
         } else {
-          warn(" Only " + space + " questions can be add in quiz!");
+          warn(" Only " + space + " questions can be added to quiz!");
         }
       }
     }
@@ -1136,18 +1584,15 @@ function QuestionBankPage() {
 
   const handleRandom = async () => {
     //this function is used to fetch api for random 100 questions.
-    token = localStorage.getItem("token");
+    token = sessionStorage.getItem("token");
     try {
-      const random = await fetch(
-        process.env.API_URL + "api/questions/random",
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`, // Include the JWT token in the Authorization header
-          },
-        }
-      );
+      const random = await fetch(process.env.API_URL + "api/questions/random", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // Include the JWT token in the Authorization header
+        },
+      });
       const randomdata = await random.json();
       setSelectedQuestions(randomdata.randomQuestions);
       setSelectedQuestionIds(randomdata.questionIDs);
@@ -1158,50 +1603,47 @@ function QuestionBankPage() {
   };
 
   function liftup(id, name) {
-    console.log('category click')
     if (filterid.id == id) {
       //settname("");
       setfilterid({});
       setAllQuestions([]);
       setSelectableRandomQuestion(0);
+      setExpandAnnouncement(`${name} collapsed.`);
     } else {
       setSelectableRandomQuestion(questions?.length);
       setfilterid({ id, name });
+      // Clear the previous announcement so screen readers don't re-announce
+      // stale text while the new chapter's questions are loading.
+      setExpandAnnouncement("");
     }
   }
 
-  const fetchQuestions1 = async (tag_type = '') => {
-    console.log('tag_type', tag_type);
-    console.log('tag_type filterid', filterid);
-
+  const fetchQuestions1 = async (tag_type = "") => {
     if (filterid === "all") {
       setisActive(true);
       try {
-        const response = await fetch(
-          process.env.API_URL + "api/questions"
-        );
+        const response = await fetch(process.env.API_URL + "api/questions");
         var data = await response.json();
         setQuestions(data);
-        setAllQuestions(data)
+        setAllQuestions(data);
         setisActive(false);
       } catch (error) {
         setisActive(false);
       }
     } else if (filterid.id != undefined && filterid.name != undefined) {
-      console.log('filterid elseif', filterid.id);
-
       setisActive(true);
       try {
-        token = localStorage.getItem("token");
+        token = sessionStorage.getItem("token");
         const response = await fetch(
-          process.env.API_URL + `api/article/category/${filterid.id}/${filterid.name}`,
+          process.env.API_URL +
+          `api/article/category/${filterid.id}/${filterid.name}`,
           {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`, // Include the JWT token in the Authorization header
             },
-          }
+          },
         );
         var data = await response.json();
         if (data.length == 0) {
@@ -1209,22 +1651,25 @@ function QuestionBankPage() {
         }
 
         const duplicateFreeArray = cullquestions(data.reverse());
-        setAllQuestions(duplicateFreeArray)
+        setAllQuestions(duplicateFreeArray);
         setQuestions(duplicateFreeArray);
         setSelectableRandomQuestion(duplicateFreeArray?.length);
 
         if (tag_type == "" && tname != "All" && tname != "") {
-          const tagdataid = generateTagId(tname)
-          const filter_question = duplicateFreeArray.filter((item) => item.tagid == tagdataid);
+          const tagdataid = generateTagId(tname);
+          const filter_question = duplicateFreeArray.filter(
+            (item) => item.tagid == tagdataid,
+          );
 
-          (filter_question.length == 0) ? warn(`No ${tname} question in this category`, 'Category Empty') : "";
+          filter_question.length == 0
+            ? warn(`No ${tname} question in this category`, "Category Empty")
+            : "";
           setQuestions(filter_question);
           setSelectableRandomQuestion(filter_question?.length);
         }
 
         setisActive(false);
         setfilterCountTrack({});
-
       } catch (error) {
         setisActive(false);
         setSelectableRandomQuestion(0);
@@ -1232,50 +1677,7 @@ function QuestionBankPage() {
     }
   };
 
-
-
-  // useEffect(() => {
-  //   if ( category14.length > 0 && category17.length > 0 && category20.length > 0 &&  category23.length > 0 ) {
-  //     setAccordianSet(true);
-  //   }
-  // }, [category14, category17, category20, category23]);
-
-
-  // const handleQuestionCheckboxChange = (event, questionId) => {
-  //   const isChecked = event.target.checked;
-
-  //   if (isChecked) {
-  //     if (selectedQuestions.length < 100) {
-  //       const question = questions.find((q) => q.question_id === questionId);
-  //       if (question) {
-  //         setSelectedQuestions((prevSelectedQuestions) => [
-  //           ...prevSelectedQuestions,
-  //           question,
-  //         ]);
-  //         // Add this line to update the SelectedQuestionIds state
-  //         setSelectedQuestionIds((prevSelectedQuestionIds) => [
-  //           ...prevSelectedQuestionIds,
-  //           questionId,
-  //         ]);
-  //       }
-  //     } else {
-  //       event.target.checked = false;
-  //       warn("You can only select up to 100 questions.");
-  //     }
-  //   } else {
-  //     setSelectedQuestions((prevSelectedQuestions) =>
-  //       prevSelectedQuestions.filter(
-  //         (question) => question.question_id !== questionId
-  //       )
-  //     );
-  //     setSelectedQuestionIds((prevSelectedQuestionIds) =>
-  //       prevSelectedQuestionIds.filter((id) => id !== questionId)
-  //     );
-  //   }
-  // };
-
   const fetchQuiz = async (token, storedName) => {
-
     try {
       const response = await fetch(
         process.env.API_URL + `getAllQuizzes?name=${storedName}`,
@@ -1285,42 +1687,43 @@ function QuestionBankPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`, // Include the JWT token in the Authorization header
           },
-        }
+        },
       );
       if (!response.ok) {
         throw new Error("Failed to fetch quiz data");
       }
       const data = await response.json();
       if (data.error == "Auth Failed") {
-
-        localStorage.clear();
+        sessionStorage.clear();
         router.push("/");
         console.log("unauthorized error in MyQuiz.js");
       }
       if (data.status === 429) {
         //
-        warn("You have made too many requests.");
-        localStorage.clear();
+        warn("Too many requests.");
+        sessionStorage.clear();
         router.push("/");
       }
 
-      let quizNameArr = data?.map(item => item.quiz_name.trim())
-      setAllQuizName(quizNameArr)
+      let quizNameArr = data?.map((item) => item.quiz_name.trim());
+      setAllQuizName(quizNameArr);
 
-      let quizNameIdArr = data?.map(item => ({
-        'quiz_name': item.quiz_name.trim(),
-        'quiz_id': item.id
-      }))
-      setAllQuizNameId(quizNameIdArr)
+      let quizNameIdArr = data?.map((item) => ({
+        quiz_name: item.quiz_name.trim(),
+        quiz_id: item.id,
+      }));
+      setAllQuizNameId(quizNameIdArr);
 
       // setQuiz(data);
     } catch (error) {
-      // localStorage.clear();
+      sessionStorage.clear();
       console.log("catch block MyQuiz.js", error);
     }
   };
 
   const handleQuestionCheckboxChange = (event, questionId) => {
+    restoreQuestionBankFocusAfterUpdate(questionId, "checkbox");
+    scheduleQuestionBankFocusRestore();
     const isChecked = event.target.checked;
 
     if (isChecked) {
@@ -1331,37 +1734,24 @@ function QuestionBankPage() {
             return item != questionId;
           });
           const filteredNewQuesArray = selectedQuestions?.filter(
-            (item) => item.question_id != questionId
+            (item) => item.question_id != questionId,
           );
 
-          // console.log('filteredIdArray', filteredIdArray, filteredNewQuesArray);
           setSelectedQuestionIds(filteredIdArray);
           setSelectedQuestions(filteredNewQuesArray);
 
           ///////////// call for checking questions //////////////
-          // countTotalQuestionAvailableInCategory(questions, filteredIdArray)
-
         } else {
-          console.log('SelectedQuestionIds', SelectedQuestionIds);
-
           const question = questions?.find((q) => q.question_id === questionId);
           setSelectedQuestions((prevSelectedQuestions) => [
             ...prevSelectedQuestions,
             question,
           ]);
 
-
-          // setSelectedQuestionIds((prevSelectedQuestionIds) => {
-          //  const newCount =  [...prevSelectedQuestionIds, questionId];
-
-          //   /////////// call for checking questions //////////////
-          //   countTotalQuestionAvailableInCategory(questions, newCount)
-          //   return newCount;
-          // });
-
-          setSelectedQuestionIds((prevSelectedQuestionIds) => [...prevSelectedQuestionIds, questionId]);
-
-
+          setSelectedQuestionIds((prevSelectedQuestionIds) => [
+            ...prevSelectedQuestionIds,
+            questionId,
+          ]);
         }
       } else {
         event.target.checked = false;
@@ -1369,17 +1759,15 @@ function QuestionBankPage() {
       }
     } else {
       setSelectedQuestions((prevSelectedQuestions) =>
-        prevSelectedQuestions?.filter((q) => q.question_id !== questionId)
+        prevSelectedQuestions?.filter((q) => q.question_id !== questionId),
       );
       setSelectedQuestionIds((prevSelectedQuestionIds) =>
-        prevSelectedQuestionIds.filter((id) => id !== questionId)
+        prevSelectedQuestionIds.filter((id) => id !== questionId),
       );
-
     }
   };
 
   const handlePrintSelectedQuestions = () => {
-
     if (selectedQuestions.length > 0) {
       const printStyles = `
         <style>
@@ -1388,7 +1776,7 @@ function QuestionBankPage() {
           }
           .topHeadingQuizPage {
             text-align: center;
-            text-transform: capitalize;
+            text-transform: none;
           }
           body {
             padding: 10px 24px;
@@ -1404,15 +1792,22 @@ function QuestionBankPage() {
       const printContent = selectedQuestions
         .map((question, index) => {
           // Shuffle the answers array
-          const shuffledAnswers = shuffleArray(removeDuplicatesFromArrayOfObjectByObjKey(question.answers));
+          const shuffledAnswers = shuffleArray(
+            removeDuplicatesFromArrayOfObjectByObjKey(
+              getQuestionAnswers(question),
+            ),
+          );
           // Extract the first shuffled answer as the correct one
-          const correctOption = `<li>${shuffledAnswers[0].answer}</li>`; // Change here
+          const correctOption = `<li>${getAnswerHtml(shuffledAnswers[0])}</li>`; // Change here
           const otherOptions = shuffledAnswers
             .slice(1)
-            .map((answer) => `<li>${answer.answer}</li>`)
+            .map((answer) => `<li>${getAnswerHtml(answer)}</li>`)
             .join("");
 
-          let newQuesText = question.question_text.replace(/<summary>Question<\/summary>\s*/, `<summary>Question  ${index + 1}<\/summary>`);
+          let newQuesText = question.question_text.replace(
+            /<summary>Question<\/summary>\s*/,
+            `<summary>Question  ${index + 1}<\/summary>`,
+          );
           return `
             <div className="question-container">
               <div>
@@ -1428,32 +1823,23 @@ function QuestionBankPage() {
         })
         .join("");
 
-      const printWindow = window.open("", "Print", "height=720,width=1280");
-      if (printWindow) {
-        setTimeout(() => {
-          printWindow.document.write(
-            `<html>
-              <head>
-                <title></title>
-                ${printStyles}
-                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-                <link rel="stylesheet" href="https://snapz.com/wp-content/uploads/snapz-print.css">
-              </head>
-              <body>
-                <h1 className="topHeadingQuizPage">${name}</h1>
-                ${printContent}
-              </body>
-            </html> `
-           
-          )}, 1000)
-          printWindow.document.close()
-          printWindow.focus();
-          setTimeout(() => { 
-            printWindow.print() 
-          }, 1500);
-      } else {
-        // warn("Popup blocked in browser");
-      }
+      const htmlContent = `<!DOCTYPE html>
+        <html>
+          <head>
+            <title>${name ? escapeHtmlForPrint(name) + " - Quiz" : "Quiz"}</title>
+            ${printStyles}
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+            <link rel="stylesheet" href="https://snapz.com/wp-content/uploads/snapz-print.css">
+            ${getMathJaxConfigScript()}
+            <script id="mathjax-script" async src="${mathJaxScriptSrc}"></script>
+          </head>
+          <body>
+            <h1 className="topHeadingQuizPage">${escapeHtmlForPrint(name)}</h1>
+            ${printContent}
+          </body>
+        </html>`;
+
+      printViaIframe(htmlContent);
     } else {
       warn("Please select some questions first.");
     }
@@ -1477,51 +1863,56 @@ function QuestionBankPage() {
       const printContent = selectedQuestions
         ?.map((question, index) => {
           const answerId = question.correct_answer;
-          const selectedOption = question.answers.find(
-            (answer) => answer.answer_id === answerId
+          const selectedOption = getQuestionAnswers(question).find(
+            (answer) => answer.answer_id === answerId,
           );
 
-
           let answerText = "";
+          const selectedAnswerText = getAnswerHtml(selectedOption);
 
-          if (
-            selectedOption.answer === "True" ||
-            selectedOption.answer === "False"
-          ) {
-            answerText = selectedOption.answer;
+          if (selectedAnswerText === "True" || selectedAnswerText === "False") {
+            answerText = selectedAnswerText;
           } else {
-            answerText = extractAnswerText(selectedOption.answer);
+            answerText = extractAnswerText(selectedAnswerText);
           }
 
-
-          //let questionText = question.question_text.replace(/<summary>Question<\/summary>\s*/, `<summary>Question  ${index + 1}<\/summary>`);
-          // return `<div className="container"> ${question_text}<br/><strong><br>Answer: ${answerText}</strong></div><br/><br/>`;
-          return `<div className="container"> <strong><summary>Question  ${index + 1} : <\/summary><br/>Answer:</strong> ${answerText}</div><br/><br/>`;
+          return `<div className="container"> <strong><summary>Question  ${index + 1
+            } : <\/summary><br/>Answer:</strong> ${answerText}</div><br/>`;
         })
         .join("");
 
-      const printWindow = window.open("", "Print", "height=720,width=1280");
-      if (printWindow) {
-        printWindow.document.write(
-          `<html><head><title></title><style>
-          
-          .topHeadingQuizPage{
-            text-align:center;
-            text-transform:capitalise;
-          }
-          @media print {
-          .container {
-            
-            page-break-inside: avoid;
-          }
-        }</style><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous"><link rel="stylesheet" href="https://snapz.com/wp-content/uploads/snapz-print.css">
-        </head></head><body><h1 className="topHeadingQuizPage">${name}</h1><br/>${printContent}</body></html>`
-        );
-        printWindow.document.close();
-        printWindow.print();
-      } else {
-        // warn("Popup blocked in browser");
-      }
+      const htmlContent = `<!DOCTYPE html>
+        <html>
+          <head>
+            <title>${name ? escapeHtmlForPrint(name) + " - Answers" : "Answer Key"}</title>
+            <style>
+              .topHeadingQuizPage{
+                text-align:center;
+                text-transform:none;
+              }
+              body {
+                padding: 10px 24px;
+                font-family: system-ui, -apple-system, sans-serif;
+              }
+              @media print {
+                .container {
+                  page-break-inside: avoid;
+                }
+              }
+            </style>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+            <link rel="stylesheet" href="https://snapz.com/wp-content/uploads/snapz-print.css">
+            ${getMathJaxConfigScript()}
+            <script id="mathjax-script" async src="${mathJaxScriptSrc}"></script>
+          </head>
+          <body className="m-4">
+            <h1 className="topHeadingQuizPage">${escapeHtmlForPrint(name)}</h1>
+            <br/>
+            ${printContent}
+          </body>
+        </html>`;
+
+      printViaIframe(htmlContent);
     } else {
       warn("Please select some questions first");
     }
@@ -1579,6 +1970,10 @@ function QuestionBankPage() {
   }
 
   function extractOptionText(option) {
+    if (typeof option !== "string") {
+      return "";
+    }
+
     const pattern = />(.*?)</;
     const pattern2 = /<p><span className="choice"[^>]*>(.*?)<\/span>/;
     const pattern3 = /<[^>]+>/g; // Remove all HTML tags
@@ -1604,6 +1999,16 @@ function QuestionBankPage() {
     return textWithoutTags.replace(pattern5, "").trim();
   }
 
+  function getQuestionAnswers(question) {
+    return Array.isArray(question?.answers)
+      ? question.answers.filter(Boolean)
+      : [];
+  }
+
+  function getAnswerHtml(answer) {
+    return typeof answer?.answer === "string" ? answer.answer : "";
+  }
+
   function uncheckAllCheckboxes() {
     setSelectedQuestions([]);
     setSelectedQuestionIds([]);
@@ -1619,72 +2024,82 @@ function QuestionBankPage() {
   };
 
   const scrambleList = () => {
-    console.log('scrambleList defaultList', defaultList);
-    console.log('scrambleList selectedQuestions', selectedQuestions);
-
     if (defaultList.length == 0) {
       setDefaultList(selectedQuestions);
     } else {
       setSelectedQuestions(shuffleArray(selectedQuestions));
-      notify("Questions Randomized")
+      notify("Questions Randomized");
     }
-
-  }
+  };
   const unscrambleList = () => {
-    if (defaultList.length != selectedQuestions.length || defaultList.length == 0) {
-      //warn("Randomize Questions", "Sorry!!")
+    if (
+      defaultList.length != selectedQuestions.length ||
+      defaultList.length == 0
+    ) {
+      //warn("Randomize Questions", "")
     }
     //  else if (defaultList.length == 0) {
     //   notify("Already Unscrambled!")
     // }
     else {
       setSelectedQuestions(defaultList);
-      notify("Questions Reset")
+      notify("Questions Reset");
     }
+  };
+  const deleteListItem = (questionId) => {
+    // 1. Find the question before it's removed
+    const questionToDelete = selectedQuestions.find(
+      (q) => q.question_id === questionId
+    );
 
-  }
-  const deleteListItem = (data) => {
-    deletelement(data);
-    if (selectedQuestions.length != defaultList.length) {
+    // 2. Build a specific label (use the Question ID)
+    const questionLabel = questionToDelete
+      ? `Question ${questionId}`
+      : `Question ${questionId}`;
+
+    // 3. Calculate remaining count before deletion
+    const remainingCount = selectedQuestions.length - 1;
+
+    // 4. Perform the deletion
+    deletelement(questionId);
+
+    // 5. Reset shuffle history if needed
+    if (selectedQuestions.length !== defaultList.length) {
       setDefaultList([]);
     }
 
-  }
+    // 6. Announce with the specific question identifier
+    setDeleteAnnouncement(
+      `${questionLabel} removed from quiz. ${remainingCount} questions remaining.`
+    );
+    setTimeout(() => setDeleteAnnouncement(""), 5000);
+  };
 
   const [totalAvailableQuestions, setTotalAvailableQuestions] = useState();
-  const countTotalQuestionAvailableInCategory = (questions, selectedQuestions) => {
+  const countTotalQuestionAvailableInCategory = (
+    questions,
+    selectedQuestions,
+  ) => {
+    const totalRemainingQues = questions.filter(
+      (obj) => !selectedQuestions.includes(obj.question_id),
+    );
 
-    // console.log('questions ', questions, selectedQuestions);
-    /// let totalRemainingQues = questions.filter(item => item.question_id == selectedQuestions);
-    const totalRemainingQues = questions.filter(obj => !selectedQuestions.includes(obj.question_id));
-
-    // console.log('totalRemainingQues', totalRemainingQues);
-    setTotalAvailableQuestions(totalRemainingQues)
-
-  }
-
-  /* TO handle category question and heirchy filter by cateogry and hide know/calc by changing filter. 
-    we get the specific category array from Test component. So that we can remove duplicate code and reduce lines of code
-    */
+    setTotalAvailableQuestions(totalRemainingQues);
+  };
 
   const filterByCategory = (category) => {
+    setSingleQuestinCategory(category == "all category" ? "All" : category);
 
-    setSingleQuestinCategory(category == 'all category' ? "All" : category);
-
-    if (categoryToggle == '2017') {
+    if (categoryToggle == "2017") {
       // category17
       const value = initial17;
       if (category == "knowledge") {
         const filteredKnowledge = [];
         value.map((item) => {
           if (item.name.includes("Knowledge")) {
-
             filteredKnowledge.push(item);
-            //setCategory17(filteredKnowledge)
           }
-        }
-        );
-
+        });
       }
 
       if (category == "calculations") {
@@ -1692,30 +2107,26 @@ function QuestionBankPage() {
         value.map((item) => {
           if (item.name.includes("Calculations")) {
             filteredCalculations.push(item);
-            //setCategory17(filteredCalculations)
           }
         });
       }
 
       if (category == "all category") {
-        setCategory17(value)
+        setCategory17(value);
       }
     }
 
-    if (categoryToggle == '2020') {
+    if (categoryToggle == "2020") {
       // category20
       const value = initial20;
       if (category == "knowledge") {
         const filteredKnowledge = [];
         value.map((item) => {
           if (item.name.includes("Knowledge")) {
-
             filteredKnowledge.push(item);
             // setCategory20(filteredKnowledge)
           }
-        }
-        );
-
+        });
       }
       if (category == "calculations") {
         const filteredCalculations = [];
@@ -1725,26 +2136,22 @@ function QuestionBankPage() {
             //setCategory20(filteredCalculations)
           }
         });
-
       }
       if (category == "all category") {
-        setCategory20(value)
+        setCategory20(value);
       }
     }
-    if (categoryToggle == '2023') {
+    if (categoryToggle == "2023") {
       // category23
       const value = initial23;
       if (category == "knowledge") {
         const filteredKnowledge = [];
         value.map((item) => {
           if (item.name.includes("Knowledge")) {
-
             filteredKnowledge.push(item);
             //setCategory23(filteredKnowledge)
           }
-        }
-        );
-
+        });
       }
       if (category == "calculations") {
         const filteredCalculations = [];
@@ -1754,24 +2161,42 @@ function QuestionBankPage() {
             //setCategory23(filteredCalculations)
           }
         });
-
       }
       if (category == "all category") {
-        setCategory23(value)
+        setCategory23(value);
       }
     }
 
-  }
-  const previewQuestion = async (question) => {
-
-    setPreviewQues(question);
-    question.answers.map((item) => {
-      if (item.answer_id == question.correct_answer) {
-        setPreviewCorrectAnswer(item.answer)
+    if (categoryToggle == "theory") {
+      // theory
+      const value = initialTheory;
+      if (category == "knowledge") {
+        const filteredKnowledge = [];
+        value.map((item) => {
+          if (item.name.includes("Knowledge")) {
+            filteredKnowledge.push(item);
+          }
+        });
       }
-    })
+      if (category == "calculations") {
+        const filteredCalculations = [];
+        value.map((item) => {
+          if (item.name.includes("Calculations")) {
+            filteredCalculations.push(item);
+          }
+        });
+      }
+      console.log("theory value", value);
 
-    token = localStorage.getItem("token");
+      if (category == "all category") {
+        setTheory(value);
+      }
+    }
+  };
+  const previewQuestion = async (question) => {
+    setPreviewQues(question);
+
+    token = sessionStorage.getItem("token");
     try {
       const solution = await fetch(
         process.env.API_URL + `api/generalfeedback?ids=${question.question_id}`,
@@ -1781,99 +2206,116 @@ function QuestionBankPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`, // Include the JWT token in the Authorization header
           },
-        }
+        },
       );
       const solutions = await solution.json();
 
-      setPreviewSolution(solutions ? solutions[0].general_feedback : "<p>No data</p>")
-
-
+      setPreviewSolution(
+        solutions ? solutions[0].general_feedback : "<p>No data</p>",
+      );
     } catch (err) {
       console.log(err);
     }
-
-  }
+  };
 
   const parseAndFormatDate = (dateStr) => {
     const date = new Date(dateStr);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Month is 0-indexed
-    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, "0"); // Month is 0-indexed
+    const day = date.getDate().toString().padStart(2, "0");
     const year = date.getFullYear();
     return `${year}-${month}-${day}`;
   };
 
   function convertDateFormatToYYYYMMDD(dateString) {
-
     const regex = /^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])-(20|19)\d\d$/;
 
     if (!regex.test(dateString)) {
-      throw new Error('Invalid date format. Please use MM-DD-YYYY.');
+      throw new Error("Invalid date format. Please use MM-DD-YYYY.");
     }
 
     // Split the date into components
-    const parts = dateString.split('-');
+    const parts = dateString.split("-");
     const month = parts[0]; // MM
-    const day = parts[1];   // DD
-    const year = parts[2];  // YYYY
+    const day = parts[1]; // DD
+    const year = parts[2]; // YYYY
 
     // Rearrange to YYYY-MM-DD
     return `${year}-${month}-${day}`;
   }
 
-  const handleDateChange = (e) => {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const nwDate = parseAndFormatDate(e)   
-
-    const utcDate = moment.tz(e, 'YYYY-MM-DD', 'America/Los_Angeles').utc().format('YYYY-MM-DD'); 
-    setQuizStateDate(utcDate)
-
-    console.log('nwDate', nwDate, utcDate);
-    
-  }
-
-
   return (
     <>
+      <Head>
+        <title>Question Bank | Snapz Quiz Builder</title>
+      </Head>
       {/* preview question modal */}
       <>
-        <Modal show={show} onHide={handleClose}>
+        <Modal
+          show={show}
+          onHide={handleClose}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="preview-modal-title"
+          enforceFocus={true}
+          restoreFocus={true}
+        >
           <Modal.Header closeButton>
             <Modal.Title>Preview Question</Modal.Title>
           </Modal.Header>
           <Modal.Body>
-            <div>
+            <div ref={previewContentRef}>
               <p>
-                <b>Question</b> - <span dangerouslySetInnerHTML={{ __html: previewQues ? previewQues.question_text : '<p>No data</p>' }}></span>
+                <b>Question</b> -{" "}
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: normalizeLatexForPreview(
+                      previewQues
+                        ? previewQues.question_text
+                        : "<p>No data</p>",
+                    ),
+                  }}
+                ></span>
               </p>
+
+              {(previewQues ? getChoicesForSolutionPrint(previewQues) : []).map(
+                (choice) => (
+                  <p className="d-flex" key={choice.answerId}>
+                    <b>{choice.letter}</b> -{" "}
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: normalizeLatexForPreview(
+                          choice.optionText || "<p>No data</p>",
+                        ),
+                      }}
+                    ></span>
+                  </p>
+                ),
+              )}
 
               <p className="d-flex">
-                <b>1</b> - <span dangerouslySetInnerHTML={{ __html: previewQues ? previewQues.answers[0].answer : '<p>No data</p>' }}></span>
+                <b>Correct Answer</b> -{" "}
+                <span>
+                  {previewQues
+                    ? getChoicesForSolutionPrint(previewQues).find(
+                      (choice) =>
+                        String(choice.answerId) ===
+                        String(previewQues.correct_answer),
+                    )?.letter || "-"
+                    : "No data"}
+                </span>
               </p>
-
-              <p className="d-flex">
-                <b>2</b> - <span dangerouslySetInnerHTML={{ __html: previewQues ? previewQues.answers[1].answer : '<p>No data</p>' }}></span>
-              </p>
-
-              <p className="d-flex">
-                <b>3</b> - <span dangerouslySetInnerHTML={{ __html: previewQues ? previewQues.answers[2].answer : '<p>No data</p>' }}></span>
-              </p>
-
-              <p className="d-flex">
-                <b>4</b> - <span dangerouslySetInnerHTML={{ __html: previewQues ? previewQues.answers[3].answer : '<p>No data</p>' }}></span>
-              </p>
-
-
-              <p className="d-flex">
-                <b>Correct Answer</b> - <span dangerouslySetInnerHTML={{ __html: previewQues ? previewCorrectAnswer : '<p>No data</p>' }}></span>
-              </p>
-
               <p>
-                <span dangerouslySetInnerHTML={{ __html: previewSolution ? previewSolution : '<p>No data</p>' }}></span>
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: normalizeLatexForPreview(
+                       previewSolution ? cleanSolutionText(previewSolution) : "<p>No data</p>",
+                    ),
+                  }}
+                ></span>
               </p>
             </div>
           </Modal.Body>
-          <Modal.Footer>
-          </Modal.Footer>
+          <Modal.Footer></Modal.Footer>
         </Modal>
       </>
       {checker ? (
@@ -1906,25 +2348,36 @@ function QuestionBankPage() {
             />
             <section id="top" className={styles.align}>
               <div className="fifty">
-                <div className={styles.sec22}>
+                <div
+                  ref={questionBankPanelRef}
+                  className={styles.sec22}
+                  role="region"
+                  aria-label="Question Bank"
+                  tabIndex={-1}
+                >
                   <Tippy
                     content="These are the chapters or categories. Select one to see the questions inside."
                     disabled={tip}
                   >
                     <div className={styles.lablesec}>
-                      <h2 className="quesBankTopContainer">
+                      <h1 className="quesBankTopContainer">
                         <span className={styles.questions}>Question Bank</span>
                         <div className="topbuttons">
-                          <div className="dropdown ">
+                          <div className="dropdown">
                             <button
-                              className={`btn btn-sm btn-light dropdown-toggle `}
+                              id="nec-version-dropdown"
+                              className="btn btn-sm btn-light dropdown-toggle"
                               type="button"
                               data-bs-toggle="dropdown"
                               aria-expanded="false"
                             >
                               NEC Version
                             </button>
-                            <ul className="dropdown-menu filterMenu">
+
+                            <ul
+                              className="dropdown-menu filterMenu"
+                              aria-labelledby="nec-version-dropdown"
+                            >
                               {/* <li>
                                 <span
                                   className="dropdown-item filterItem"
@@ -1936,157 +2389,180 @@ function QuestionBankPage() {
                                 </span>
                               </li> */}
                               <li>
-                                <span
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
                                     handleCategoryChange("2017");
                                   }}
                                 >
                                   NEC 2017
-                                </span>
+                                </button>
                               </li>
+
                               <li>
-                                <span
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
                                     handleCategoryChange("2020");
                                   }}
                                 >
                                   NEC 2020
-                                </span>
+                                </button>
                               </li>
+
                               <li>
-                                <span
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
                                     handleCategoryChange("2023");
                                   }}
                                 >
                                   NEC 2023
-                                </span>
+                                </button>
                               </li>
-                              {/* <li>
-                                <span
+
+                              <li>
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
-                                    handleCategoryChange("All");
+                                    handleCategoryChange("theory");
                                   }}
                                 >
-                                  All
-                                </span>
-                              </li> */}
+                                  Theory
+                                </button>
+                              </li>
                             </ul>
                           </div>
-                          {/* <div className="dropdown ">
+                          <div className="dropdown">
                             <button
-                              className={`btn btn-sm btn-light dropdown-toggle `}
-                              type="button"
-                              data-bs-toggle="dropdown"
-                              aria-expanded="false"
-                            >
-                              calc/know
-                            </button>
-                            <ul className="dropdown-menu filterMenu">
-                              <li onClick={() => filterByCategory("knowledge")}>
-                                <span
-                                  className="dropdown-item filterItem"
-
-                                >
-                                  Knowledge
-                                </span>
-                              </li>
-                              <li onClick={() => filterByCategory("calculations")}>
-                                <span
-                                  className="dropdown-item filterItem"
-
-                                >
-                                  Calculations
-                                </span>
-                              </li>
-                              <li onClick={() => filterByCategory("all category")}>
-                                <span
-                                  className="dropdown-item filterItem"
-
-                                >
-                                  All
-                                </span>
-                              </li>
-
-                            </ul>
-                          </div> */}
-                          <div className="dropdown ">
-                            <button
-                              className={`btn btn-sm btn-light dropdown-toggle `}
+                              id="difficulty-dropdown"
+                              className="btn btn-sm btn-light dropdown-toggle"
                               type="button"
                               data-bs-toggle="dropdown"
                               aria-expanded="false"
                             >
                               Difficulty
                             </button>
-                            <ul className="dropdown-menu filterMenu">
+
+                            <ul
+                              className="dropdown-menu filterMenu"
+                              aria-labelledby="difficulty-dropdown"
+                            >
                               <li>
-                                <span
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
                                     handleDifficulty("Easy");
                                   }}
                                 >
                                   Easy
-                                </span>
+                                </button>
                               </li>
+
                               <li>
-                                <span
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
                                     handleDifficulty("Medium");
                                   }}
                                 >
                                   Medium
-                                </span>
+                                </button>
                               </li>
+
                               <li>
-                                <span
+                                <button
+                                  type="button"
                                   className="dropdown-item filterItem"
                                   onClick={() => {
                                     handleDifficulty("Hard");
                                   }}
                                 >
                                   Hard
-                                </span>
+                                </button>
                               </li>
+
                               <li>
-                                <span
-                                  className="dropdown-item filterItem"
-                                  onClick={() => {
-                                    fetchQuestions1('All');
-                                    settname("All");
-                                  }}
-                                >
-                                  All
-                                </span>
+                                <li>
+                                  <button
+                                    type="button"
+                                    className="dropdown-item filterItem"
+                                    onClick={() => {
+                                      fetchQuestions1("All");
+                                      settname("All");
+                                      setDifficultyMessage("All questions displayed.");
+                                    }}
+                                  >
+                                    All
+                                  </button>
+                                </li>
                               </li>
                             </ul>
+
+                          </div>
+                          <div
+                            role="status"
+                            aria-live="polite"
+                            style={{
+                              position: "absolute",
+                              width: "1px",
+                              height: "1px",
+                              padding: 0,
+                              margin: "-1px",
+                              overflow: "hidden",
+                              clip: "rect(0, 0, 0, 0)",
+                              border: 0,
+                            }}
+                          >
+                            {difficultyMessage}
                           </div>
                         </div>
-                      </h2>
+                      </h1>
 
                       <div className={styles.mainquiz}>
                         <div className={styles.contquiz}>
                           <div className={styles.contOne}>
-                            <div className={styles.contts}><span> {categoryToggle ? `SNAPZ QB ${categoryToggle} NEC` : ""}</span></div>
-                            {/* <div className={styles.contt}>Calc/Know: <span>{ singleQuestionCategory ? singleQuestionCategory : "All"}</span></div> */}
+                            <div className={styles.contts}>
+                              <p className={styles.topBarText}>
+                                {categoryToggle
+                                  ? `SNAPZ QB ${categoryToggle} NEC`
+                                  : ""}
+                              </p>
+                            </div>
                           </div>
                           <div className={styles.contOne}>
-                            <div className={`${styles.contt} selected-articles`}>Selected:
-                              <span>{filterid?.name ? filterid?.name : ""}</span>
+                            <div
+                              className={`${styles.contt} selected-articles`}
+                            >
+                              <p className={styles.topBarText}>
+                                Selected:{" "}
+                                <span>
+                                  {filterid?.name ? filterid?.name : ""}
+                                </span>
+                              </p>
                             </div>
-                            <div className={`${styles.contt} selected-diff`}>Difficulty: <span>{tname ? tname : "All"}</span></div>
+                            <div className={`${styles.contt} selected-diff`}>
+                              <p className={styles.topBarText}>
+                                Difficulty: <span>{tname ? tname : "All"}</span>
+                              </p>
+                            </div>
                           </div>
                         </div>
                         <div className={styles.contSub}>
-                          <span>Select Random ({selectableRandomQuestion ? selectableRandomQuestion : 0})</span>
+                          <p className={styles.topBarText}>
+                            Select Random (
+                            {selectableRandomQuestion
+                              ? selectableRandomQuestion
+                              : 0}
+                            )
+                          </p>
                           <div className={styles.contBtn}>
-
                             <input
                               id="randombtn1"
                               className={styles.randomtext}
@@ -2094,6 +2570,7 @@ function QuestionBankPage() {
                               type="number"
                               size="20"
                               placeholder="# Qsts"
+                              aria-label="Number of Questions"
                               onChange={(e) => {
                                 const value =
                                   e.target.value === ""
@@ -2102,7 +2579,9 @@ function QuestionBankPage() {
                                 setrandomlimit(value);
                               }}
                             />
-                            <button onClick={(e) => customrandomques(e)}>Select</button>
+                            <button onClick={(e) => customrandomques(e)}>
+                              Select
+                            </button>
                           </div>
                         </div>
                         <ToastContainer
@@ -2118,341 +2597,66 @@ function QuestionBankPage() {
                     </div>
                   </Tippy>
 
-                  <div className={styles.sec2}>
+                  <a
+                    href="#quiz-panel"
+                    className={styles.skipToQuizLink}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const target = document.getElementById('quiz-panel');
+                      if (target) {
+                        target.focus({ preventScroll: true });
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }}
+                  >
+                    Skip to Quiz Question List
+                  </a>
 
+                  <div className={styles.sec2}>
                     <Test
                       liftup={liftup}
                       category14={category14}
                       category17={category17}
                       category20={category20}
                       category23={category23}
+                      theory={theory}
                       All={All}
                       setCategory14={setCategory14}
                       setCategory17={setCategory17}
                       setCategory20={setCategory20}
                       setCategory23={setCategory23}
+                      setTheory={setTheory}
                       setAll={setAll}
                       setInitial17={setInitial17}
                       setInitial20={setInitial20}
                       setInitial23={setInitial23}
+                      setInitialTheory={setInitialTheory}
                       style="bordered"
                     />
 
-                    {/* {categoryToggle == "All" ? (
-                      <>
-                        {All ? (
-                          <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{
-                              duration: 0.7,
-                              delay: 0.5,
-                            }}
-                          >
-                            <ul className={styles.accordList}>
-                              {All.map((item, index) => (
-                                <li key={index}>
-                                  <div
-                                    className={`${
-                                      filterid?.name == item.name
-                                        ? styles.activeList
-                                        : ""
-                                    }`}
-                                    onClick={() => {
-                                      liftup(item.id, item.name);
-                                    }}
-                                  >
-                                    {" "}
-                                    <VscDebugBreakpointLog
-                                      className={styles.bullet}
-                                    />
-                                    <span className="categoryNameText">
-                                      {item.name}
-                                    </span>
-                                  </div>
-                                  <div className="quesArea">
-                                    {filterid.name == item.name
-                                      ? questions?.map((question) => (
-                                          <motion.div
-                                            key={question.question_id}
-                                            className="box"
-                                            initial={{ opacity: 0, x: 100 }} // Starts with opacity 0 and shifted 100 pixels to the right
-                                            animate={{ opacity: 1, x: 0 }} // Animates opacity to 1 and shifts back to 0
-                                            transition={{
-                                              duration: 0.7,
-                                              delay: 0.5,
-                                            }}
-                                          >
-                                            <div
-                                              id={question.question_id}
-                                              className={`${styles.quescont} ${
-                                                SelectedQuestionIds.includes(
-                                                  question.question_id
-                                                )
-                                                  ? styles.checked
-                                                  : ""
-                                              }`}
-                                              key={question.question_id}
-                                            >
-                                              <label>
-                                                <div className={styles.ques}>
-                                                  <input
-                                                    className={styles.checkbox}
-                                                    type="checkbox"
-                                                    name={
-                                                      "question_" +
-                                                      question.question_id
-                                                    }
-                                                    onChange={(event) =>
-                                                      handleQuestionCheckboxChange(
-                                                        event,
-                                                        question.question_id
-                                                      )
-                                                    }
-                                                  />
-                                                  {`Question ${question.question_id}` +
-                                                    " - " +
-                                                    extractQuestionText(
-                                                      question
-                                                    )}
-                                                </div>
-                                              </label>
-                                              {question.question_type ===
-                                              "truefalse" ? (
-                                                <div className={styles.answers}>
-                                                  <label
-                                                    className={styles.options}
-                                                  >
-                                                    <input
-                                                      type="radio"
-                                                      name={`question_${question.question_id}`}
-                                                      value="true"
-                                                      disabled
-                                                    />
-                                                    True
-                                                  </label>
-                                                  <label
-                                                    className={styles.options}
-                                                  >
-                                                    <input
-                                                      type="radio"
-                                                      name={`question_${question.question_id}`}
-                                                      value="false"
-                                                      disabled
-                                                    />
-                                                    False
-                                                  </label>
-                                                </div>
-                                              ) : (
-                                                <div className={styles.answers}>
-                                                  {question.answers.map(
-                                                    (answer) => (
-                                                      <div
-                                                        key={answer.answer_id}
-                                                        className={styles.mcq}
-                                                      >
-                                                        <label
-                                                          className={
-                                                            styles.options
-                                                          }
-                                                          key={answer.answer_id}
-                                                        >
-                                                          <input
-                                                            type="radio"
-                                                            name={`question_${question.question_id}`}
-                                                            value={
-                                                              question
-                                                                .answers[0]
-                                                                .answer
-                                                            }
-                                                            disabled
-                                                          />
-                                                          {extractOptionText(
-                                                            answer.answer.slice(
-                                                              3,
-                                                              answer.answer
-                                                                .length - 4
-                                                            )
-                                                          )}
-                                                        </label>
-                                                      </div>
-                                                    )
-                                                  )}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </motion.div>
-                                        ))
-                                      : null}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          </motion.div>
-                        ) : null}
-                      </>
-                    ) : null} */}
-
-                    {/* {categoryToggle == "2014" ? (
-                      <>
-                        {category14 ? (
-                          <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{
-                              duration: 0.7,
-                              delay: 0.5,
-                            }}
-                          >
-                            <ul className={styles.accordList}>
-                              {category14.map((item, index) => (
-                                <li key={index}>
-                                  <div
-                                    className={`${
-                                      filterid?.name == item.name
-                                        ? styles.activeList
-                                        : ""
-                                    }`}
-                                    onClick={() => {
-                                      liftup(item.id, item.name);
-                                    }}
-                                  >
-                                    {" "}
-                                    <VscDebugBreakpointLog
-                                      className={styles.bullet}
-                                    />
-                                    <span className="categoryNameText">
-                                      {item.name}
-                                    </span>
-                                  </div>
-                                  <div className="quesArea">
-                                    {filterid.name == item.name
-                                      ? questions?.map((question) => (
-                                          <motion.div
-                                            key={question.question_id}
-                                            className="box"
-                                            initial={{ opacity: 0, x: 100 }} // Starts with opacity 0 and shifted 100 pixels to the right
-                                            animate={{ opacity: 1, x: 0 }} // Animates opacity to 1 and shifts back to 0
-                                            transition={{
-                                              duration: 0.7,
-                                              delay: 0.5,
-                                            }}
-                                          >
-                                            <div
-                                              id={question.question_id}
-                                              className={`${styles.quescont} ${
-                                                SelectedQuestionIds.includes(
-                                                  question.question_id
-                                                )
-                                                  ? styles.checked
-                                                  : ""
-                                              }`}
-                                              key={question.question_id}
-                                            >
-                                              <label>
-                                                <div className={styles.ques}>
-                                                  <input
-                                                    className={styles.checkbox}
-                                                    type="checkbox"
-                                                    name={
-                                                      "question_" +
-                                                      question.question_id
-                                                    }
-                                                    onChange={(event) =>
-                                                      handleQuestionCheckboxChange(
-                                                        event,
-                                                        question.question_id
-                                                      )
-                                                    }
-                                                  />
-                                                  {`Question ${question.question_id}` +
-                                                    " - " +
-                                                    extractQuestionText(
-                                                      question
-                                                    )}
-                                                </div>
-                                              </label>
-                                              {question.question_type ===
-                                              "truefalse" ? (
-                                                <div className={styles.answers}>
-                                                  <label
-                                                    className={styles.options}
-                                                  >
-                                                    <input
-                                                      type="radio"
-                                                      name={`question_${question.question_id}`}
-                                                      value="true"
-                                                      disabled
-                                                    />
-                                                    True
-                                                  </label>
-                                                  <label
-                                                    className={styles.options}
-                                                  >
-                                                    <input
-                                                      type="radio"
-                                                      name={`question_${question.question_id}`}
-                                                      value="false"
-                                                      disabled
-                                                    />
-                                                    False
-                                                  </label>
-                                                </div>
-                                              ) : (
-                                                <div className={styles.answers}>
-                                                  {question.answers.map(
-                                                    (answer) => (
-                                                      <div
-                                                        key={answer.answer_id}
-                                                        className={styles.mcq}
-                                                      >
-                                                        <label
-                                                          className={
-                                                            styles.options
-                                                          }
-                                                          key={answer.answer_id}
-                                                        >
-                                                          <input
-                                                            type="radio"
-                                                            name={`question_${question.question_id}`}
-                                                            value={
-                                                              question
-                                                                .answers[0]
-                                                                .answer
-                                                            }
-                                                            disabled
-                                                          />
-                                                          {extractOptionText(
-                                                            answer.answer.slice(
-                                                              3,
-                                                              answer.answer
-                                                                .length - 4
-                                                            )
-                                                          )}
-                                                        </label>
-                                                      </div>
-                                                    )
-                                                  )}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </motion.div>
-                                        ))
-                                      : null}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          </motion.div>
-                        ) : null}
-                      </>
-                    ) : null} */}
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        position: "absolute",
+                        width: "1px",
+                        height: "1px",
+                        padding: 0,
+                        margin: "-1px",
+                        overflow: "hidden",
+                        clip: "rect(0, 0, 0, 0)",
+                        border: 0,
+                      }}
+                    >
+                      {expandAnnouncement}
+                    </div>
 
                     {categoryToggle == "-" ? (
                       <h3 className="sec1text">
                         This Question Bank displays a list of questions for you
-                        to use in your quiz.Please start by selecting a category
-                        from the <strong>'Categories'</strong> drop-down above.
+                        to use in your quiz.Please start by selecting a NEC
+                        version from the <strong>'NEC Version'</strong>{" "}
+                        drop-down above.
                       </h3>
                     ) : (
                       <>
@@ -2469,9 +2673,7 @@ function QuestionBankPage() {
                               >
                                 <ul className={styles.accordList}>
                                   {category17?.map((item, index) => (
-
-                                    <li key={index} >
-
+                                    <li key={index}>
                                       <div
                                         id={
                                           item.name.includes("Chapter 9") &&
@@ -2503,10 +2705,21 @@ function QuestionBankPage() {
                                             : item.name.includes("Knowledge")
                                               ? styles.calculationStyle
                                               : ""
-                                          }
-`}
+                                          } `}
+                                        aria-expanded={filterid?.id === item.id}
+                                        role="button"
+                                        tabIndex={0}
                                         onClick={() => {
                                           liftup(item.id, item.name);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            liftup(item.id, item.name);
+                                          }
                                         }}
                                       >
                                         {" "}
@@ -2517,13 +2730,17 @@ function QuestionBankPage() {
                                           {item.name}
                                         </span>
                                       </div>
-                                      <div>
+                                      <div
+                                        id={`chapter-panel-${item.id}`}
+                                        role="region"
+                                        aria-label={`Questions for ${item.name}`}
+                                      >
                                         {filterid.id == item.id
                                           ? questions?.map((question) => (
                                             <motion.div
-                                              key={randomKey()}
-                                              initial={{ opacity: 0, x: 100 }} // Starts with opacity 0 and shifted 100 pixels to the right
-                                              animate={{ opacity: 1, x: 0 }} // Animates opacity to 1 and shifts back to 0
+                                              key={question.question_id}
+                                              initial={{ opacity: 0, x: 100 }}
+                                              animate={{ opacity: 1, x: 0 }}
                                               transition={{
                                                 duration: 0.7,
                                                 delay: 0.5,
@@ -2531,79 +2748,161 @@ function QuestionBankPage() {
                                             >
                                               <div
                                                 id={question.question_id}
+                                                aria-selected={SelectedQuestionIds.includes(
+                                                  question.question_id,
+                                                )}
+                                                role="option"
                                                 className={`${styles.quescont
                                                   } ${SelectedQuestionIds.includes(
-                                                    question.question_id
+                                                    question.question_id,
                                                   )
                                                     ? styles.checked
                                                     : ""
                                                   }  `}
-                                                key={randomKey()}
                                               >
-                                                <label >
-                                                  <div className={styles.ques}>
+                                                <label>
+                                                  <div
+                                                    className={styles.ques}
+                                                  >
                                                     <input
                                                       className={
                                                         styles.checkbox
                                                       }
+                                                      data-question-bank-question-id={
+                                                        question.question_id
+                                                      }
+                                                      data-question-bank-control="checkbox"
                                                       type="checkbox"
                                                       name={
                                                         "question_" +
                                                         question.question_id
                                                       }
-                                                      checked={SelectedQuestionIds.includes(question.question_id) ? true : false}
+                                                      checked={
+                                                        SelectedQuestionIds.includes(
+                                                          question.question_id,
+                                                        )
+                                                          ? true
+                                                          : false
+                                                      }
                                                       onChange={(event) =>
                                                         handleQuestionCheckboxChange(
                                                           event,
-                                                          question.question_id
+                                                          question.question_id,
+                                                        )
+                                                      }
+                                                      onMouseDown={(event) =>
+                                                        handleQuestionBankControlMouseDown(
+                                                          event,
+                                                          question.question_id,
+                                                          "checkbox",
                                                         )
                                                       }
                                                     />
-
                                                     Question-
                                                     {question.question_id}
                                                     &nbsp;
                                                     {question.questionName.slice(
                                                       0,
-                                                      11
+                                                      11,
                                                     )}
                                                     {extractQuestionForAllCategory(
-                                                      question.question_text
+                                                      question.question_text,
                                                     )}
-
-
-                                                    {/* {extractQuestionText(
-                                                        question
-                                                      ) === ""
-                                                        ? stripQues(
-                                                            question.question_text
-                                                          )
-                                                        : `Question ${question.question_id} ` +
-                                                          extractQuestionText(
-                                                            question
-                                                          )} */}
-
                                                   </div>
-
                                                 </label>
-                                                <div >
+
+                                                <div>
                                                   <div>
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{categoryToggle}</b></p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>{categoryToggle}</b>
+                                                    </p>
 
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{item.name.includes("Calculations") && "Calc"} {item.name.includes("Knowledge") && "Know"}</b></p>
-
-                                                    {/* <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{singleQuestionCategory ? singleQuestionCategory : 'All'}</b></p> */}
-                                                    {/*<p className="m-0 text-center" style={{ fontSize: '10px' }}><b> {tname ? tname : 'All'}</b></p> */}
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{question?.tagid ? generateTagName(question?.tagid) : '-'}</b></p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {item.name.includes(
+                                                          "Calculations",
+                                                        ) && "Calc"}{" "}
+                                                        {item.name.includes(
+                                                          "Knowledge",
+                                                        ) && "Know"}
+                                                      </b>
+                                                    </p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {question?.tagid
+                                                          ? generateTagName(
+                                                            question?.tagid,
+                                                          )
+                                                          : "-"}
+                                                      </b>
+                                                    </p>
                                                   </div>
                                                   <div className="mt-2 text-center">
-                                                    <span onClick={() => previewQuestion(question)}>
-                                                      <HiMiniMagnifyingGlass className="previewQusetion" onClick={handleShow} />
+                                                    <span
+                                                      onClick={() =>
+                                                        previewQuestion(
+                                                          question,
+                                                        )
+                                                      }
+                                                    >
+                                                      <HiMiniMagnifyingGlass
+                                                        className="previewQusetion"
+                                                        onClick={handleShow}
+                                                      />
                                                     </span>
                                                   </div>
-
-
                                                 </div>
+                                                <button
+                                                  type="button"
+                                                  className={styles.addButton}
+                                                  data-question-bank-question-id={
+                                                    question.question_id
+                                                  }
+                                                  data-question-bank-control="action"
+                                                  onClick={() =>
+                                                    toggleQuestionSelection(
+                                                      question.question_id,
+                                                    )
+                                                  }
+                                                  onMouseDown={(event) =>
+                                                    handleQuestionBankControlMouseDown(
+                                                      event,
+                                                      question.question_id,
+                                                      "action",
+                                                    )
+                                                  }
+                                                  aria-pressed={SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )}
+                                                  aria-label={
+                                                    SelectedQuestionIds.includes(
+                                                      question.question_id,
+                                                    )
+                                                      ? `Remove question ${question.question_id} from quiz`
+                                                      : `Add question ${question.question_id} to quiz`
+                                                  }
+                                                >
+                                                  {SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )
+                                                    ? "Remove"
+                                                    : "Add"}
+                                                </button>
 
                                                 {question.question_type ===
                                                   "truefalse" ? (
@@ -2628,7 +2927,6 @@ function QuestionBankPage() {
                                                         styles.options
                                                       }
                                                     >
-
                                                       <input
                                                         type="radio"
                                                         name={`question_${question.question_id}`}
@@ -2642,43 +2940,38 @@ function QuestionBankPage() {
                                                   <div
                                                     className={styles.answers}
                                                   >
-                                                    {question.answers.map(
-                                                      (answer) => (
-                                                        <div
-                                                          key={randomKey()}
+                                                    {getQuestionAnswers(
+                                                      question,
+                                                    ).map((answer) => (
+                                                      <div
+                                                        key={
+                                                          answer.answer_id
+                                                        }
+                                                        className={styles.mcq}
+                                                      >
+                                                        <label
                                                           className={
-                                                            styles.mcq
+                                                            styles.options
                                                           }
                                                         >
-                                                          <label
-                                                            className={
-                                                              styles.options
-                                                            }
-                                                            key={
-                                                              answer.answer_id
-                                                            }
-                                                          >
-                                                            <input
-                                                              type="radio"
-                                                              name={`question_${question.question_id}`}
-                                                              value={
-                                                                question
-                                                                  .answers[0]
-                                                                  .answer
-                                                              }
-                                                              disabled
-                                                            />
-                                                            {extractOptionText(
-                                                              answer.answer.slice(
-                                                                3,
-                                                                answer.answer
-                                                                  .length - 4
-                                                              )
+                                                          <input
+                                                            type="radio"
+                                                            name={`question_${question.question_id}`}
+                                                            value={getAnswerHtml(
+                                                              getQuestionAnswers(
+                                                                question,
+                                                              )[0],
                                                             )}
-                                                          </label>
-                                                        </div>
-                                                      )
-                                                    )}
+                                                            disabled
+                                                          />
+                                                          {extractOptionText(
+                                                            getAnswerHtml(
+                                                              answer,
+                                                            ),
+                                                          )}
+                                                        </label>
+                                                      </div>
+                                                    ))}
                                                   </div>
                                                 )}
                                               </div>
@@ -2695,7 +2988,6 @@ function QuestionBankPage() {
                         ) : null}
                         {categoryToggle == "2020" ? (
                           <>
-
                             {category20 ? (
                               <motion.div
                                 initial={{ opacity: 0, y: 20 }}
@@ -2706,11 +2998,8 @@ function QuestionBankPage() {
                                 }}
                               >
                                 <ul className={styles.accordList}>
-
                                   {category20.map((item, index) => (
-
                                     <li key={index}>
-
                                       <div
                                         id={
                                           item?.name?.includes("Chapter 9") &&
@@ -2743,8 +3032,20 @@ function QuestionBankPage() {
                                               ? styles.calculationStyle
                                               : ""
                                           } `}
+                                        aria-expanded={filterid?.id === item.id}
+                                        role="button"
+                                        tabIndex={0}
                                         onClick={() => {
-                                          liftup(item.id, item?.name);
+                                          liftup(item.id, item.name);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            liftup(item.id, item.name);
+                                          }
                                         }}
                                       >
                                         <VscDebugBreakpointLog
@@ -2754,31 +3055,36 @@ function QuestionBankPage() {
                                           {item?.name}
                                         </span>
                                       </div>
-                                      <div>
-
+                                      <div
+                                        id={`chapter-panel-${item.id}`}
+                                        role="region"
+                                        aria-label={`Questions for ${item.name}`}
+                                      >
                                         {filterid.id == item.id
                                           ? questions?.map((question) => (
                                             <motion.div
-                                              key={randomKey()}
+                                              key={question.question_id}
                                               className="box"
-                                              initial={{ opacity: 0, x: 100 }} // Starts with opacity 0 and shifted 100 pixels to the right
-                                              animate={{ opacity: 1, x: 0 }} // Animates opacity to 1 and shifts back to 0
+                                              initial={{ opacity: 0, x: 100 }}
+                                              animate={{ opacity: 1, x: 0 }}
                                               transition={{
                                                 duration: 0.7,
                                                 delay: 0.5,
                                               }}
                                             >
-
                                               <div
                                                 id={question.question_id}
+                                                aria-selected={SelectedQuestionIds.includes(
+                                                  question.question_id,
+                                                )}
+                                                role="option"
                                                 className={`${styles.quescont
                                                   } ${SelectedQuestionIds.includes(
-                                                    question.question_id
+                                                    question.question_id,
                                                   )
                                                     ? styles.checked
                                                     : ""
                                                   } p-1`}
-                                                key={randomKey()}
                                               >
                                                 <label>
                                                   <div
@@ -2788,16 +3094,33 @@ function QuestionBankPage() {
                                                       className={
                                                         styles.checkbox
                                                       }
+                                                      data-question-bank-question-id={
+                                                        question.question_id
+                                                      }
+                                                      data-question-bank-control="checkbox"
                                                       type="checkbox"
                                                       name={
                                                         "question_" +
                                                         question.question_id
                                                       }
-                                                      checked={SelectedQuestionIds.includes(question.question_id) ? true : false}
+                                                      checked={
+                                                        SelectedQuestionIds.includes(
+                                                          question.question_id,
+                                                        )
+                                                          ? true
+                                                          : false
+                                                      }
                                                       onChange={(event) =>
                                                         handleQuestionCheckboxChange(
                                                           event,
-                                                          question.question_id
+                                                          question.question_id,
+                                                        )
+                                                      }
+                                                      onMouseDown={(event) =>
+                                                        handleQuestionBankControlMouseDown(
+                                                          event,
+                                                          question.question_id,
+                                                          "checkbox",
                                                         )
                                                       }
                                                     />
@@ -2806,55 +3129,106 @@ function QuestionBankPage() {
                                                     &nbsp;
                                                     {question.questionName.slice(
                                                       0,
-                                                      11
+                                                      11,
                                                     )}
                                                     {extractQuestionForAllCategory(
-                                                      question.question_text
+                                                      question.question_text,
                                                     )}
-                                                    {/* {extractQuestionText(
-                                                        question
-                                                      ) === ""
-                                                        ? stripQues(
-                                                            question.question_text
-                                                          )
-                                                        : `Question ${question.question_id} ` +
-                                                          extractQuestionText(
-                                                            question
-                                                          )} */}
-                                                    {/* <>
-                                                  
-                                                  </>
-                                                  <>
-                                                    {extractQuestionText(
-                                                      question
-                                                    ) === ""
-                                                      ? console.log("blank")
-                                                      : console.log(
-                                                          "not blank"
-                                                        )}
-                                                  </> */}
                                                   </div>
                                                 </label>
-                                                <div >
+
+                                                <div>
                                                   <div>
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{categoryToggle}</b></p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>{categoryToggle}</b>
+                                                    </p>
 
-
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{item.name.includes("Calculations") && "Calc"} {item.name.includes("Knowledge") && "Know"}</b></p>
-                                                    {/* <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{singleQuestionCategory ? singleQuestionCategory : 'All'}</b></p> */}
-
-                                                    {/* <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>prev-{tname ? tname : 'All'}</b></p> */}
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{question?.tagid ? generateTagName(question?.tagid) : '-'}</b></p>
-
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {item.name.includes(
+                                                          "Calculations",
+                                                        ) && "Calc"}{" "}
+                                                        {item.name.includes(
+                                                          "Knowledge",
+                                                        ) && "Know"}
+                                                      </b>
+                                                    </p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {question?.tagid
+                                                          ? generateTagName(
+                                                            question?.tagid,
+                                                          )
+                                                          : "-"}
+                                                      </b>
+                                                    </p>
                                                   </div>
                                                   <div className="mt-2 text-center">
-                                                    <span onClick={() => previewQuestion(question)}>
-                                                      <HiMiniMagnifyingGlass className="previewQusetion" onClick={handleShow} />
+                                                    <span
+                                                      onClick={() =>
+                                                        previewQuestion(
+                                                          question,
+                                                        )
+                                                      }
+                                                    >
+                                                      <HiMiniMagnifyingGlass
+                                                        className="previewQusetion"
+                                                        onClick={handleShow}
+                                                      />
                                                     </span>
                                                   </div>
-
-
                                                 </div>
+                                                <button
+                                                  type="button"
+                                                  className={styles.addButton}
+                                                  data-question-bank-question-id={
+                                                    question.question_id
+                                                  }
+                                                  data-question-bank-control="action"
+                                                  onClick={() =>
+                                                    toggleQuestionSelection(
+                                                      question.question_id,
+                                                    )
+                                                  }
+                                                  onMouseDown={(event) =>
+                                                    handleQuestionBankControlMouseDown(
+                                                      event,
+                                                      question.question_id,
+                                                      "action",
+                                                    )
+                                                  }
+                                                  aria-pressed={SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )}
+                                                  aria-label={
+                                                    SelectedQuestionIds.includes(
+                                                      question.question_id,
+                                                    )
+                                                      ? `Remove question ${question.question_id} from quiz`
+                                                      : `Add question ${question.question_id} to quiz`
+                                                  }
+                                                >
+                                                  {SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )
+                                                    ? "Remove"
+                                                    : "Add"}
+                                                </button>
 
                                                 {question.question_type ===
                                                   "truefalse" ? (
@@ -2892,41 +3266,38 @@ function QuestionBankPage() {
                                                   <div
                                                     className={styles.answers}
                                                   >
-                                                    {question.answers.map(
-                                                      (answer) => (
-                                                        <div
-                                                          key={randomKey()}
+                                                    {getQuestionAnswers(
+                                                      question,
+                                                    ).map((answer) => (
+                                                      <div
+                                                        key={
+                                                          answer.answer_id
+                                                        }
+                                                        className={styles.mcq}
+                                                      >
+                                                        <label
                                                           className={
-                                                            styles.mcq
+                                                            styles.options
                                                           }
                                                         >
-                                                          <label
-                                                            className={
-                                                              styles.options
-                                                            }
-                                                            key={randomKey()}
-                                                          >
-                                                            <input
-                                                              type="radio"
-                                                              name={`question_${question.question_id}`}
-                                                              value={
-                                                                question
-                                                                  .answers[0]
-                                                                  .answer
-                                                              }
-                                                              disabled
-                                                            />
-                                                            {extractOptionText(
-                                                              answer.answer.slice(
-                                                                3,
-                                                                answer.answer
-                                                                  .length - 4
-                                                              )
+                                                          <input
+                                                            type="radio"
+                                                            name={`question_${question.question_id}`}
+                                                            value={getAnswerHtml(
+                                                              getQuestionAnswers(
+                                                                question,
+                                                              )[0],
                                                             )}
-                                                          </label>
-                                                        </div>
-                                                      )
-                                                    )}
+                                                            disabled
+                                                          />
+                                                          {extractOptionText(
+                                                            getAnswerHtml(
+                                                              answer,
+                                                            ),
+                                                          )}
+                                                        </label>
+                                                      </div>
+                                                    ))}
                                                   </div>
                                                 )}
                                               </div>
@@ -2987,8 +3358,20 @@ function QuestionBankPage() {
                                               ? styles.calculationStyle
                                               : ""
                                           } `}
+                                        aria-expanded={filterid?.id === item.id}
+                                        role="button"
+                                        tabIndex={0}
                                         onClick={() => {
                                           liftup(item.id, item.name);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            liftup(item.id, item.name);
+                                          }
                                         }}
                                       >
                                         {" "}
@@ -2999,14 +3382,18 @@ function QuestionBankPage() {
                                           {item.name}
                                         </span>
                                       </div>
-                                      <div>
+                                      <div
+                                        id={`chapter-panel-${item.id}`}
+                                        role="region"
+                                        aria-label={`Questions for ${item.name}`}
+                                      >
                                         {filterid.id == item.id
                                           ? questions?.map((question) => (
                                             <motion.div
-                                              key={randomKey()}
+                                              key={question.question_id}
                                               className="box"
-                                              initial={{ opacity: 0, x: 100 }} // Starts with opacity 0 and shifted 100 pixels to the right
-                                              animate={{ opacity: 1, x: 0 }} // Animates opacity to 1 and shifts back to 0
+                                              initial={{ opacity: 0, x: 100 }}
+                                              animate={{ opacity: 1, x: 0 }}
                                               transition={{
                                                 duration: 0.7,
                                                 delay: 0.5,
@@ -3014,14 +3401,17 @@ function QuestionBankPage() {
                                             >
                                               <div
                                                 id={question.question_id}
+                                                aria-selected={SelectedQuestionIds.includes(
+                                                  question.question_id,
+                                                )}
+                                                role="option"
                                                 className={`${styles.quescont
                                                   } ${SelectedQuestionIds.includes(
-                                                    question.question_id
+                                                    question.question_id,
                                                   )
                                                     ? styles.checked
                                                     : ""
                                                   }`}
-                                                key={randomKey()}
                                               >
                                                 <label>
                                                   <div
@@ -3031,15 +3421,29 @@ function QuestionBankPage() {
                                                       className={
                                                         styles.checkbox
                                                       }
+                                                      data-question-bank-question-id={
+                                                        question.question_id
+                                                      }
+                                                      data-question-bank-control="checkbox"
                                                       type="checkbox"
                                                       name={
                                                         "question_" +
                                                         question.question_id
                                                       }
+                                                      checked={SelectedQuestionIds.includes(
+                                                        question.question_id,
+                                                      )}
                                                       onChange={(event) =>
                                                         handleQuestionCheckboxChange(
                                                           event,
-                                                          question.question_id
+                                                          question.question_id,
+                                                        )
+                                                      }
+                                                      onMouseDown={(event) =>
+                                                        handleQuestionBankControlMouseDown(
+                                                          event,
+                                                          question.question_id,
+                                                          "checkbox",
                                                         )
                                                       }
                                                     />
@@ -3048,42 +3452,105 @@ function QuestionBankPage() {
                                                     &nbsp;
                                                     {question.questionName.slice(
                                                       0,
-                                                      11
+                                                      11,
                                                     )}
                                                     {extractQuestionForAllCategory(
-                                                      question.question_text
+                                                      question.question_text,
                                                     )}
-                                                    {/* {extractQuestionText(
-                                                        question
-                                                      ) === ""
-                                                        ? stripQues(
-                                                            question.question_text
-                                                          )
-                                                        : `Question ${question.question_id} ` +
-                                                          extractQuestionText(
-                                                            question
-                                                          )} */}
                                                   </div>
                                                 </label>
 
-                                                <div >
+                                                <div>
                                                   <div>
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{categoryToggle}</b></p>
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{item.name.includes("Calculations") && "Calc"} {item.name.includes("Knowledge") && "Know"}</b></p>
-
-                                                    {/* <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{singleQuestionCategory ? singleQuestionCategory : 'All'}</b></p> */}
-                                                    {/* <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>prev-{question?.tagid}</b></p> */}
-                                                    <p className="m-0 text-center" style={{ fontSize: '10px' }}><b>{question?.tagid ? generateTagName(question?.tagid) : '-'}</b></p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>{categoryToggle}</b>
+                                                    </p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {item.name.includes(
+                                                          "Calculations",
+                                                        ) && "Calc"}{" "}
+                                                        {item.name.includes(
+                                                          "Knowledge",
+                                                        ) && "Know"}
+                                                      </b>
+                                                    </p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {question?.tagid
+                                                          ? generateTagName(
+                                                            question?.tagid,
+                                                          )
+                                                          : "-"}
+                                                      </b>
+                                                    </p>
                                                   </div>
                                                   <div className="mt-2 text-center">
-                                                    <span onClick={() => previewQuestion(question)}>
-                                                      {/* <GrView className="previewQusetion" onClick={handleShow} /> */}
-                                                      <HiMiniMagnifyingGlass className="previewQusetion" onClick={handleShow} />
+                                                    <span
+                                                      onClick={() =>
+                                                        previewQuestion(
+                                                          question,
+                                                        )
+                                                      }
+                                                    >
+                                                      <HiMiniMagnifyingGlass
+                                                        className="previewQusetion"
+                                                        onClick={handleShow}
+                                                      />
                                                     </span>
                                                   </div>
-
-
                                                 </div>
+                                                <button
+                                                  type="button"
+                                                  className={styles.addButton}
+                                                  data-question-bank-question-id={
+                                                    question.question_id
+                                                  }
+                                                  data-question-bank-control="action"
+                                                  onClick={() =>
+                                                    toggleQuestionSelection(
+                                                      question.question_id,
+                                                    )
+                                                  }
+                                                  onMouseDown={(event) =>
+                                                    handleQuestionBankControlMouseDown(
+                                                      event,
+                                                      question.question_id,
+                                                      "action",
+                                                    )
+                                                  }
+                                                  aria-pressed={SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )}
+                                                  aria-label={
+                                                    SelectedQuestionIds.includes(
+                                                      question.question_id,
+                                                    )
+                                                      ? `Remove question ${question.question_id} from quiz`
+                                                      : `Add question ${question.question_id} to quiz`
+                                                  }
+                                                >
+                                                  {SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )
+                                                    ? "Remove"
+                                                    : "Add"}
+                                                </button>
 
                                                 {question.question_type ===
                                                   "truefalse" ? (
@@ -3121,43 +3588,361 @@ function QuestionBankPage() {
                                                   <div
                                                     className={styles.answers}
                                                   >
-                                                    {question.answers.map(
-                                                      (answer) => (
-                                                        <div
-                                                          key={randomKey()}
+                                                    {getQuestionAnswers(
+                                                      question,
+                                                    ).map((answer) => (
+                                                      <div
+                                                        key={
+                                                          answer.answer_id
+                                                        }
+                                                        className={styles.mcq}
+                                                      >
+                                                        <label
                                                           className={
-                                                            styles.mcq
+                                                            styles.options
                                                           }
                                                         >
-                                                          <label
-                                                            className={
-                                                              styles.options
-                                                            }
-                                                            key={
-                                                              answer.answer_id
-                                                            }
-                                                          >
-                                                            <input
-                                                              type="radio"
-                                                              name={`question_${question.question_id}`}
-                                                              value={
-                                                                question
-                                                                  .answers[0]
-                                                                  .answer
-                                                              }
-                                                              disabled
-                                                            />
-                                                            {extractOptionText(
-                                                              answer.answer.slice(
-                                                                3,
-                                                                answer.answer
-                                                                  .length - 4
-                                                              )
+                                                          <input
+                                                            type="radio"
+                                                            name={`question_${question.question_id}`}
+                                                            value={getAnswerHtml(
+                                                              getQuestionAnswers(
+                                                                question,
+                                                              )[0],
                                                             )}
-                                                          </label>
-                                                        </div>
-                                                      )
+                                                            disabled
+                                                          />
+                                                          {extractOptionText(
+                                                            getAnswerHtml(
+                                                              answer,
+                                                            ),
+                                                          )}
+                                                        </label>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </motion.div>
+                                          ))
+                                          : null}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </motion.div>
+                            ) : null}
+                          </>
+                        ) : null}
+
+                        {categoryToggle == "theory" ? (
+                          <>
+                            {theory ? (
+                              <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{
+                                  duration: 0.7,
+                                  delay: 0.5,
+                                }}
+                              >
+                                <ul className={styles.accordList}>
+                                  {theory.map((item, index) => (
+                                    <li key={index}>
+                                      <div
+                                        id={
+                                          item.name.includes("Chapter 9") &&
+                                            (item.name.includes("Table") ||
+                                              item.name.includes("Tables"))
+                                            ? "addSpacingChap9"
+                                            : ""
+                                        }
+                                        className={`${filterid?.id == item.id
+                                          ? styles.activeList
+                                          : ""
+                                          } ${item.name.includes("Chapter")
+                                            ? styles.chapterStyle
+                                            : ""
+                                          } ${item.name.includes("Article")
+                                            ? styles.articleStyle
+                                            : ""
+                                          }
+                                    ${item.name.includes("Article") &&
+                                            item.name.includes("Calculations")
+                                            ? styles.calcArt
+                                            : item.name.includes("Calculations")
+                                              ? styles.calculationStyle
+                                              : ""
+                                          }
+                                    ${item.name.includes("Article") &&
+                                            item.name.includes("Knowledge")
+                                            ? styles.calcArt
+                                            : item.name.includes("Knowledge")
+                                              ? styles.calculationStyle
+                                              : ""
+                                          } `}
+                                        aria-expanded={filterid?.id === item.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => {
+                                          liftup(item.id, item.name);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            liftup(item.id, item.name);
+                                          }
+                                        }}
+                                      >
+                                        {" "}
+                                        <VscDebugBreakpointLog
+                                          className={styles.bullet}
+                                        />
+                                        <span className="categoryNameText">
+                                          {item.name}
+                                        </span>
+                                      </div>
+                                      <div
+                                        id={`chapter-panel-${item.id}`}
+                                        role="region"
+                                        aria-label={`Questions for ${item.name}`}
+                                      >
+                                        {filterid.id == item.id
+                                          ? questions?.map((question) => (
+                                            <motion.div
+                                              key={question.question_id}
+                                              className="box"
+                                              initial={{ opacity: 0, x: 100 }}
+                                              animate={{ opacity: 1, x: 0 }}
+                                              transition={{
+                                                duration: 0.7,
+                                                delay: 0.5,
+                                              }}
+                                            >
+                                              <div
+                                                id={question.question_id}
+                                                aria-selected={SelectedQuestionIds.includes(
+                                                  question.question_id,
+                                                )}
+                                                role="option"
+                                                className={`${styles.quescont
+                                                  } ${SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )
+                                                    ? styles.checked
+                                                    : ""
+                                                  }`}
+                                              >
+                                                <label>
+                                                  <div
+                                                    className={styles.ques}
+                                                  >
+                                                    <input
+                                                      className={
+                                                        styles.checkbox
+                                                      }
+                                                      data-question-bank-question-id={
+                                                        question.question_id
+                                                      }
+                                                      data-question-bank-control="checkbox"
+                                                      type="checkbox"
+                                                      name={
+                                                        "question_" +
+                                                        question.question_id
+                                                      }
+                                                      checked={SelectedQuestionIds.includes(
+                                                        question.question_id,
+                                                      )}
+                                                      onChange={(event) =>
+                                                        handleQuestionCheckboxChange(
+                                                          event,
+                                                          question.question_id,
+                                                        )
+                                                      }
+                                                      onMouseDown={(event) =>
+                                                        handleQuestionBankControlMouseDown(
+                                                          event,
+                                                          question.question_id,
+                                                          "checkbox",
+                                                        )
+                                                      }
+                                                    />
+                                                    Question-
+                                                    {question.question_id}
+                                                    &nbsp;
+                                                    {question.questionName.slice(
+                                                      0,
+                                                      11,
                                                     )}
+                                                    {extractQuestionForAllCategory(
+                                                      question.question_text,
+                                                    )}
+                                                  </div>
+                                                </label>
+
+                                                <div>
+                                                  <div>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>{categoryToggle}</b>
+                                                    </p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {item.name.includes(
+                                                          "Calculations",
+                                                        ) && "Calc"}{" "}
+                                                        {item.name.includes(
+                                                          "Knowledge",
+                                                        ) && "Know"}
+                                                      </b>
+                                                    </p>
+                                                    <p
+                                                      className="m-0 text-center"
+                                                      style={{
+                                                        fontSize: "10px",
+                                                      }}
+                                                    >
+                                                      <b>
+                                                        {question?.tagid
+                                                          ? generateTagName(
+                                                            question?.tagid,
+                                                          )
+                                                          : "-"}
+                                                      </b>
+                                                    </p>
+                                                  </div>
+                                                  <div className="mt-2 text-center">
+                                                    <span
+                                                      onClick={() =>
+                                                        previewQuestion(
+                                                          question,
+                                                        )
+                                                      }
+                                                    >
+                                                      <HiMiniMagnifyingGlass
+                                                        className="previewQusetion"
+                                                        onClick={handleShow}
+                                                      />
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  className={styles.addButton}
+                                                  data-question-bank-question-id={
+                                                    question.question_id
+                                                  }
+                                                  data-question-bank-control="action"
+                                                  onClick={() =>
+                                                    toggleQuestionSelection(
+                                                      question.question_id,
+                                                    )
+                                                  }
+                                                  onMouseDown={(event) =>
+                                                    handleQuestionBankControlMouseDown(
+                                                      event,
+                                                      question.question_id,
+                                                      "action",
+                                                    )
+                                                  }
+                                                  aria-pressed={SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )}
+                                                  aria-label={
+                                                    SelectedQuestionIds.includes(
+                                                      question.question_id,
+                                                    )
+                                                      ? `Remove question ${question.question_id} from quiz`
+                                                      : `Add question ${question.question_id} to quiz`
+                                                  }
+                                                >
+                                                  {SelectedQuestionIds.includes(
+                                                    question.question_id,
+                                                  )
+                                                    ? "Remove"
+                                                    : "Add"}
+                                                </button>
+
+                                                {question.question_type ===
+                                                  "truefalse" ? (
+                                                  <div
+                                                    className={styles.answers}
+                                                  >
+                                                    <label
+                                                      className={
+                                                        styles.options
+                                                      }
+                                                    >
+                                                      <input
+                                                        type="radio"
+                                                        name={`question_${question.question_id}`}
+                                                        value="true"
+                                                        disabled
+                                                      />
+                                                      True
+                                                    </label>
+                                                    <label
+                                                      className={
+                                                        styles.options
+                                                      }
+                                                    >
+                                                      <input
+                                                        type="radio"
+                                                        name={`question_${question.question_id}`}
+                                                        value="false"
+                                                        disabled
+                                                      />
+                                                      False
+                                                    </label>
+                                                  </div>
+                                                ) : (
+                                                  <div
+                                                    className={styles.answers}
+                                                  >
+                                                    {getQuestionAnswers(
+                                                      question,
+                                                    ).map((answer) => (
+                                                      <div
+                                                        key={
+                                                          answer.answer_id
+                                                        }
+                                                        className={styles.mcq}
+                                                      >
+                                                        <label
+                                                          className={
+                                                            styles.options
+                                                          }
+                                                        >
+                                                          <input
+                                                            type="radio"
+                                                            name={`question_${question.question_id}`}
+                                                            value={getAnswerHtml(
+                                                              getQuestionAnswers(
+                                                                question,
+                                                              )[0],
+                                                            )}
+                                                            disabled
+                                                          />
+                                                          {extractOptionText(
+                                                            getAnswerHtml(
+                                                              answer,
+                                                            ),
+                                                          )}
+                                                        </label>
+                                                      </div>
+                                                    ))}
                                                   </div>
                                                 )}
                                               </div>
@@ -3174,35 +3959,71 @@ function QuestionBankPage() {
                         ) : null}
                       </>
                     )}
-                    {categoryToggle == "theory" ? <>Theory</> : null}
                   </div>
                 </div>
 
-                <div className={styles.halfsec2}>
+                <div
+                  id="quiz-panel"
+                  ref={quizPanelRef}
+                  className={styles.halfsec2}
+                  role="region"
+                  aria-label="Quiz"
+                  tabIndex="-1"
+                >
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      position: "absolute",
+                      width: "1px",
+                      height: "1px",
+                      padding: 0,
+                      margin: "-1px",
+                      overflow: "hidden",
+                      clip: "rect(0, 0, 0, 0)",
+                      border: 0,
+                    }}
+                  >
+                    {deleteAnnouncement}
+                  </div>
                   <h2 className={styles.sec3head}>
-                    {/* <span className={styles.quesprev}>Quiz</span> */}
                     <span className="buttonGrpQuesPrev">
-                      <div className={styles.scramble_div} >
+                      <div className={styles.scramble_div}>
                         <span className={styles.quesprev}>Quiz</span>
                         <div>
-                          <button className="btn btn-sm btn-light mx-2" onClick={scrambleList}><small>Randomize</small></button>
-                          <button className="btn btn-sm btn-light" onClick={unscrambleList}><small>Reset</small></button>
+                          <button
+                            className="btn btn-sm btn-light mx-2"
+                            onClick={scrambleList}
+                          >
+                            <small>Randomize</small>
+                          </button>
+                          <button
+                            className="btn btn-sm btn-light"
+                            onClick={unscrambleList}
+                          >
+                            <small>Reset</small>
+                          </button>
                         </div>
                       </div>
                       <div className="quiz-functional-button">
-                        <div
-                          className=" btn btn btn-sm btn-light textWithIcons textWithIcons2"
-                          onClick={() => handleOpenRedirect("Open")} >
+                        <button
+                          type="button"
+                          className="btn btn btn-sm btn-light textWithIcons textWithIcons2"
+                          onClick={() => handleOpenRedirect("Open")}
+                        >
                           <FaFolderOpen className={styles.sec3buttons} />
                           Open
-                        </div>
+                        </button>
 
                         <Tippy
                           content="Use this button to save the quiz for future use."
-                          disabled={tip}>
+                          disabled={tip}
+                        >
                           <button
                             className="btn btn-sm btn-light textWithIcons"
-                            onClick={openDialogBoxBeforeSave} >
+                            onClick={openDialogBoxBeforeSave}
+                            disabled={selectedQuestions.length ? false : true}
+                          >
                             <PiFloppyDiskBold className={styles.sec3buttons} />
                             Save
                           </button>
@@ -3210,56 +4031,73 @@ function QuestionBankPage() {
 
                         <Tippy
                           content="Use this button to save the previous quiz with new name for future use."
-                          disabled={tip}>
+                          disabled={tip}
+                        >
                           <button
                             className="btn btn-sm btn-light textWithIcons"
-                            // onClick={openDialogBoxBeforeSave} >
-                            onClick={openDialogBoxOnSaveAs} >
+                            onClick={openDialogBoxOnSaveAs}
+                            disabled={selectedQuestions.length ? false : true}
+                          >
                             <PiFloppyDiskBold className={styles.sec3buttons} />
                             Save As
                           </button>
                         </Tippy>
                         <button
                           className="btn btn-sm btn-light textWithIcons"
-                          // onClick={refreshPage}
-                          onClick={() => handleOpenRedirect("New")}>
+                          onClick={() => handleOpenRedirect("New")}
+                          disabled={selectedQuestions.length ? false : true}
+                        >
                           <BiSolidWindowAlt className={styles.sec3buttons} />
                           New
                         </button>
 
                         <div className="dropdown-center">
                           <button
-                            className={`btn btn-light btn-sm  dropdown-toggle textWithIcons`}
+                            id="print-dropdown"
+                            className="btn btn-light btn-sm dropdown-toggle textWithIcons"
                             type="button"
                             data-bs-toggle="dropdown"
-                            aria-expanded="false">
+                            aria-expanded="false"
+                          >
                             <AiFillPrinter className={styles.sec3buttons} />
                             Print
                           </button>
-                          <ul className="dropdown-menu filterMenu">
+
+                          <ul
+                            className="dropdown-menu filterMenu"
+                            aria-labelledby="print-dropdown"
+                          >
                             <li className="printDropdownli">
-                              <span
+                              <button
+                                type="button"
                                 id="printBtnDropdown"
+                                className="dropdown-item"
                                 onClick={handlePrintSelectedQuestions}
                               >
                                 Print Quiz
-                              </span>
+                              </button>
                             </li>
+
                             <li className="printDropdownli">
-                              <span
+                              <button
+                                type="button"
                                 id="printBtnDropdown"
+                                className="dropdown-item"
                                 onClick={handlePrintSelectedAnswers}
                               >
                                 Print Answers
-                              </span>
+                              </button>
                             </li>
+
                             <li className="printDropdownli">
-                              <span
+                              <button
+                                type="button"
                                 id="printBtnDropdown"
+                                className="dropdown-item"
                                 onClick={handlePrintSolutionSet}
                               >
                                 Print Solutions
-                              </span>
+                              </button>
                             </li>
                           </ul>
                         </div>
@@ -3273,72 +4111,16 @@ function QuestionBankPage() {
                           content="Type the name of your quiz."
                           disabled={tip}
                         >
-                          {/*<input
-                            value={name}
-                            id={styles.inptext1}
-                            className={styles.inptext}
-                            type="text"
-                            placeholder="Quiz name"
-                            onChange={(e) => {
-                              setname(e.target.value);
-                            }}
-                          /> */}
-
                           <label className={styles.inptextone}>
-                            Quiz Name : <span>{name}</span>
-                            {/* <input 
-                                value={name}
-                                id={styles.inptext1}
-                                type="text"
-                                onChange={(e) => {
-                                  setname(e.target.value);
-                                }}
-                                readOnly
-                              /> */}
-                             
+                            Quiz Name : <span style={{ textTransform: "none" }}>{name}</span>
                           </label>
                         </Tippy>
-
-                        {/* <input
-                        id={styles.inptext3}
-                        className={styles.inptext}
-                        type="date"
-                        placeholder="Date"
-                        onChange={(e) => {
-                          setQuizStateDate(e.target.value);
-                        }}
-                        size="15"
-                      /> */}
-
-                        <label className={styles.inptexttwo}>
-                          Date
-
-                          <DatePicker
-                            selected={quizStateDate}
-                            id={styles.inptext3}
-                            onChange={(date) => handleDateChange(date)}
-                            dateFormat="MM-dd-yyyy"
-                            placeholderText="MM-DD-YYYY"
-                          />
-                          {/* <DatePicker selected={quizStateDate} onChange={(date) => handleDateChange(date)} /> */}
-                        </label>
-
                       </div>
                       <div className={styles.newquizdisc}>
                         <Tippy
                           content="Type the title of your quiz."
                           disabled={tip}
                         >
-                          {/* <input
-                          id={styles.inptext2}
-                          value={title}
-                          className={styles.inptext}
-                          type="text"
-                          placeholder="Description"
-                          onChange={(e) => {
-                            settitle(e.target.value);
-                          }}
-                        /> */}
                           <label className={styles.inptextthree}>
                             Description
                             <input
@@ -3354,64 +4136,64 @@ function QuestionBankPage() {
                       </div>
                     </div>
                     <div className={styles.newquiz}>
-
-
                       {selectedQuestions.length > 0 ? (
                         <span className={styles.selectedQues}>
-                          Total Qsts : {selectedQuestions.length}
+                          Number of Questions : {selectedQuestions.length}
                         </span>
                       ) : (
                         <span className={styles.selectedQues}>
-                          Total Qsts : 0
+                          Number of Questions : 0
                         </span>
                       )}
                     </div>
                   </div>
                   <div className={styles.sec3}>
-
-
                     <div className={styles.sec3scroll}>
                       {selectedQuestions.length ? (
                         selectedQuestions?.map((selectedQuestion) => {
                           const question = selectedQuestion;
 
-                          // Render the selected question directly
                           return (
                             <div
                               className={styles.selectedques}
-                              key={randomKey()}
+                              key={question.question_id}
                             >
                               <span className={styles.previewques}>
                                 Question-
                                 {question.question_id}
                                 {extractQuestionForAllCategory(
-                                  question.question_text
+                                  question.question_text,
                                 )}
-                                {/* {extractQuestionText(question) === ""
-                                  ? stripQues(question.question_text)
-                                  : `Question ${question.question_id} ` +
-                                    extractQuestionText(question)} */}
                               </span>
-                              {/* Render other details of the selected question */}
                               <div className="SelectedQuestionIcons">
-                                <div className="CrossBtn" onClick={() => { deleteListItem(question.question_id) }}>
+                                <button
+                                  type="button"
+                                  className="CrossBtn"
+                                  aria-label="Remove question from quiz"
+                                  onClick={() => {
+                                    deleteListItem(question.question_id);
+                                  }}
+                                >
                                   <CgCloseR className="crossIcon" />
-                                </div>
-                                <div onClick={() => previewQuestion(question)}>
-                                  <HiMiniMagnifyingGlass className=" mt-1 h5" onClick={handleShow} />
-                                </div>
+                                </button>
 
+                                <button
+                                  type="button"
+                                  className="PreviewBtn"
+                                  aria-label="Preview question"
+                                  onClick={() => {
+                                    previewQuestion(question);
+                                    handleShow();
+                                  }}
+                                >
+                                  <HiMiniMagnifyingGlass className="mt-1 h5" />
+                                </button>
                               </div>
-
                             </div>
                           );
                         })
                       ) : (
-                        <h3>
-                          This is a preview of the quiz you will be creating.
-                          Please type your quiz name ,description and date ,
-                          select questions from categories and print them.
-                        </h3>
+                        <h3>Questions used in the Quiz.</h3>
                       )}
                     </div>
                   </div>
@@ -3423,7 +4205,6 @@ function QuestionBankPage() {
       ) : (
         <div className="null"></div>
       )}
-
     </>
   );
 }
