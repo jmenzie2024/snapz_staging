@@ -6,6 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import Head from "next/head";
 const Login = () => {
   const [email, setemail] = useState("");
   const [pass, setpass] = useState("");
@@ -23,96 +24,13 @@ const Login = () => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
+
     if (token) {
       router.push("/question-bank");
     }
   }, []);
 
-  // const handleLogin = async (event) => {
-  //   event.preventDefault();
-  //   if (email != "" && pass != "") {
-  //     setisActive(true);
-
-  //     try {
-  //       const data = await fetch(
-  //         `https://backend-c3b8.onrender.com/api/login`,
-  //         {
-  //           method: "POST",
-  //           headers: {
-  //             "Content-Type": "application/json",
-  //           },
-  //           body: JSON.stringify({ Email: email, Pass: pass }),
-  //         }
-  //       );
-  //       const res = await data.json();
-  //       console.log(res);
-  //       if (res.success == "success") {
-  //         notify("Login successful");
-  //         localStorage.setItem("user", res.username);
-  //         localStorage.setItem("token", res.token);
-  //         router.push("/question-bank");
-  //       } else if (res.success == "false") {
-  //         warn("wrong username or password");
-  //       } else if (res.success == "error") {
-  //         warn("something went wrong");
-  //       } else if (res.status === 429) {
-  //         warn("You have made too many requests.");
-  //       } else {
-  //         warn("cant login now.");
-  //       }
-
-  //       setisActive(false);
-  //     } catch (err) {
-  //       console.log(err);
-  //       setisActive(false);
-  //     }
-  //   } else {
-  //     warn("Please fill all fields");
-  //   }
-  // };
-  // const handleLogin = async (event) => {
-  //   event.preventDefault();
-  //   if (email != "" && pass != "") {
-  //     setisActive(true);
-
-  //     try {
-  //       const data = await fetch(
-  //         `https://backend-c3b8.onrender.com/api/login`,
-  //         {
-  //           method: "POST",
-  //           headers: {
-  //             "Content-Type": "application/json",
-  //           },
-  //           body: JSON.stringify({ Email: email, Pass: pass }),
-  //         }
-  //       );
-  //       const res = await data.json();
-  //       console.log(res);
-  //       if (res.success == "success") {
-  //         notify("Login successful");
-  //         localStorage.setItem("user", res.username);
-  //         localStorage.setItem("token", res.token);
-  //         router.push("/question-bank");
-  //       } else if (res.success == "false") {
-  //         warn("wrong username or password");
-  //       } else if (res.success == "error") {
-  //         warn("something went wrong");
-  //       } else if (res.status === 429) {
-  //         warn("You have made too many requests.");
-  //       } else {
-  //         warn("cant login now.");
-  //       }
-
-  //       setisActive(false);
-  //     } catch (err) {
-  //       console.log(err);
-  //       setisActive(false);
-  //     }
-  //   } else {
-  //     warn("Please fill all fields");
-  //   }
-  // }
   const handleLogin = async (event) => {
     event.preventDefault();
     if (email != "" && pass != "") {
@@ -131,10 +49,10 @@ const Login = () => {
               password: pass,
               product_id: "13350",
             }),
-          }
+          },
         );
         const res = await data.json();
-       
+
         if (res.active == true) {
           generateAuthToken();
         } else {
@@ -155,7 +73,7 @@ const Login = () => {
     try {
       setisActive(true);
       //const data1 = await fetch(`https://backend-c3b8.onrender.com/api/login`, {
-      const data1 = await fetch( process.env.API_URL+`api/login`, {
+      const data1 = await fetch(process.env.API_URL + `api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -169,8 +87,8 @@ const Login = () => {
       setisActive(false);
       if (res1.success == "success") {
         // notify("Login successful");
-        localStorage.setItem("user", res1.username);
-        localStorage.setItem("token", res1.token);
+        sessionStorage.setItem("user", res1.username);
+        sessionStorage.setItem("token", res1.token);
         router.push("/question-bank");
       } else if (res1.success == "false") {
         error("wrong username or password");
@@ -188,22 +106,32 @@ const Login = () => {
   }
 
   const resetform = () => {
-    setemail("")
-    setpass("")
-  }
+    setemail("");
+    setpass("");
+  };
 
   const overLayFun = () => {
-   
-    return <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10000}} className="loader" >
-      <MoonLoader color="#fff" />
-    </div>
-  }
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 10000,
+        }}
+        className="loader"
+      >
+        <MoonLoader color="#fff" />
+      </div>
+    );
+  };
   return (
     <>
-      <LoadingOverlay
-        active={isActive}
-        text={overLayFun()}
-      >
+      <Head>
+        <title>Login | Snapz Quiz Builder</title>
+      </Head>
+      <LoadingOverlay active={isActive} text={overLayFun()}>
         <div className={styles.form}>
           <form className={styles.formIn}>
             <img
@@ -248,9 +176,8 @@ const Login = () => {
               </a> */}
               <p>
                 <Link href="https://snapz.com/login-member/?action=forgot_password">
-                Forgot Password
+                  Forgot Password
                 </Link>
-
               </p>
             </div>
             <div className={styles.buttonGrp}>
@@ -261,7 +188,11 @@ const Login = () => {
               >
                 Login
               </button>
-              <button className="btn btn-secondary mx-2" onClick={resetform} type="reset">
+              <button
+                className="btn btn-secondary mx-2"
+                onClick={resetform}
+                type="reset"
+              >
                 Clear
               </button>
             </div>
