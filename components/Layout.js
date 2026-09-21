@@ -3,24 +3,34 @@ import { useEffect } from "react";
 import Footer from "./Footer";
 import Header from "./Header";
 
-
 const Layout = ({ children }) => {
-
   const router = useRouter();
-  var token;  
 
-  useEffect(() => {   
-    token = localStorage.getItem("token");    
-    if (!token) {     
-      localStorage.clear();
+  const handleSkipToMain = () => {
+    const mainContent = document.getElementById("main-content");
+
+    if (mainContent) {
+      mainContent.focus();
+    }
+  };
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("token"); // Changed to sessionStorage
+    if (!token) {
+      sessionStorage.clear();
       router.push("/");
-    } 
+    }
   }, []);
 
   return (
     <>
+      <a className="skip-link" href="#main-content" onClick={handleSkipToMain}>
+        Skip to main content
+      </a>
       <Header />
-      {children}
+      <main id="main-content" className="app-main" tabIndex="-1">
+        {children}
+      </main>
       <Footer />
     </>
   );
