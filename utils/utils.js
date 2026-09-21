@@ -55,8 +55,8 @@ export function extractQIDfromString(string) {
 // }
 
 export async function getCategory() {
-  const user = localStorage.getItem("user");
-  const token = localStorage.getItem("token");
+  const user = sessionStorage.getItem("user");
+  const token = sessionStorage.getItem("token");
 
   try {
     const data = await fetch( process.env.API_URL+`api/getCategoryByUsername?user=${user}`,
@@ -76,9 +76,9 @@ export async function getCategory() {
   }
 }
 export async function postCategory(category) {
-  const user = localStorage.getItem("user");
+  const user = sessionStorage.getItem("user");
   const categoryData = { username: user, category: category };
-  const token = localStorage.getItem("token");
+  const token = sessionStorage.getItem("token");
 
   try {
     const data = await fetch(
@@ -101,8 +101,8 @@ export async function postCategory(category) {
 
 //function to check if user have saved quiz or not
 export async function checkQuizData() {
-  const storedName = localStorage.getItem("user");
-  const token = localStorage.getItem("token");
+  const storedName = sessionStorage.getItem("user");
+  const token = sessionStorage.getItem("token");
   try {
     const response = await fetch(
        process.env.API_URL+`api/checksavedquiz?name=${storedName}`,
@@ -120,7 +120,7 @@ export async function checkQuizData() {
     }
     const data = await response.json();
     if (data.error == "Auth Failed") {
-      localStorage.clear();
+      sessionStorage.clear();
       router.push("/");
       console.log("unauthorized error in MyQuiz.js");
     } else if (data.error == "Failed to retrieve quizzes") {
@@ -587,4 +587,3 @@ export function isValidYYmmddFormat(dateString) {
   const date = new Date(dateString);
   return date.toISOString().slice(0, 10) === dateString;
 }
-
