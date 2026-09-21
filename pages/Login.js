@@ -6,6 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+
 const Login = () => {
   const [email, setemail] = useState("");
   const [pass, setpass] = useState("");
@@ -23,7 +24,7 @@ const Login = () => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (token) {
       router.push("/question-bank");
     }
@@ -49,8 +50,8 @@ const Login = () => {
   //       console.log(res);
   //       if (res.success == "success") {
   //         notify("Login successful");
-  //         localStorage.setItem("user", res.username);
-  //         localStorage.setItem("token", res.token);
+  //         sessionStorage.setItem("user", res.username);
+  //         sessionStorage.setItem("token", res.token);
   //         router.push("/question-bank");
   //       } else if (res.success == "false") {
   //         warn("wrong username or password");
@@ -91,8 +92,8 @@ const Login = () => {
   //       console.log(res);
   //       if (res.success == "success") {
   //         notify("Login successful");
-  //         localStorage.setItem("user", res.username);
-  //         localStorage.setItem("token", res.token);
+  //         sessionStorage.setItem("user", res.username);
+  //         sessionStorage.setItem("token", res.token);
   //         router.push("/question-bank");
   //       } else if (res.success == "false") {
   //         warn("wrong username or password");
@@ -169,8 +170,8 @@ const Login = () => {
       setisActive(false);
       if (res1.success == "success") {
         // notify("Login successful");
-        localStorage.setItem("user", res1.username);
-        localStorage.setItem("token", res1.token);
+        sessionStorage.setItem("user", res1.username);
+        sessionStorage.setItem("token", res1.token);
         router.push("/question-bank");
       } else if (res1.success == "false") {
         error("wrong username or password");
@@ -198,6 +199,7 @@ const Login = () => {
       <LoadingOverlay
         active={isActive}
         text={overLayFun()}
+        styles={{ content: base => base }}
       >
         <div className={styles.form}>
           <form className={styles.formIn}>
